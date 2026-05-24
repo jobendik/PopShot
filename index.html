@@ -2,12 +2,22 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#07101e" />
     <title>Bubble Breaker Adventure</title>
+    <!-- CrazyGames SDK v3. Loaded synchronously so window.CrazyGames is
+         available before the (deferred) module script runs. The adapter in
+         src/systems/platform.ts gracefully no-ops if the script is blocked
+         or fails to load. -->
+    <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
   </head>
   <body>
     <div id="wrap">
       <canvas id="game" width="960" height="540"></canvas>
+    </div>
+    <div id="rotate-prompt" aria-hidden="true">
+      <div class="rotate-icon">⟳</div>
+      <div class="rotate-text">Please rotate your device to landscape</div>
     </div>
     <script type="module" src="/src/main.ts"></script>
   </body>

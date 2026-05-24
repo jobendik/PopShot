@@ -86,14 +86,20 @@ export class Player {
     this.x += this.vx * dt;
     this.x = clamp(this.x, WALL_L + this.w/2, WALL_R - this.w/2);
 
-    // Walk animation
-    if (this.vx !== 0) this.walkAnim += dt * 12;
-    this.bob = Math.sin(this.walkAnim) * 2;
+    // Walk + idle animation. Walking advances faster and bigger; standing
+    // still adds a tiny breathing motion so the character feels alive.
+    if (this.vx !== 0) {
+      this.walkAnim += dt * 12;
+      this.bob = Math.sin(this.walkAnim) * 2;
+    } else {
+      this.walkAnim += dt * 2.2;
+      this.bob = Math.sin(this.walkAnim) * 0.6;
+    }
 
     // Lava damage
     for (const h of game.hazards) {
       if (h.type === 'lava' && !h.dead && this.x > h.x && this.x < h.x + h.w && Math.abs(this.y - h.y) < 28) {
-        if (this.invuln <= 0) game.killPlayer(this);
+        if (this.invuln <= 0) game.killPlayer(this, 'hazard');
       }
     }
 
@@ -222,6 +228,7 @@ export class Player {
 
     // Body
     const bodyColor = this.isP2 ? '#34a0a4' : '#3a86ff';
+    const bodyDark  = this.isP2 ? '#1d646a' : '#1b4fb8';
     ctx.fillStyle = bodyColor;
     ctx.strokeStyle = '#0a1832';
     ctx.lineWidth = 2;
@@ -230,8 +237,12 @@ export class Player {
     ctx.fillRect(x + 3, y - 14, 6, 14);
     ctx.strokeRect(x - 9, y - 14, 6, 14);
     ctx.strokeRect(x + 3, y - 14, 6, 14);
-    // Torso
-    ctx.fillStyle = bodyColor;
+    // Torso with subtle vertical gradient — gives the character depth without
+    // changing silhouette or recognizability.
+    const torsoGrad = ctx.createLinearGradient(0, y - 36, 0, y - 12);
+    torsoGrad.addColorStop(0, bodyColor);
+    torsoGrad.addColorStop(1, bodyDark);
+    ctx.fillStyle = torsoGrad;
     roundRect(ctx, x - 13, y - 36, 26, 24, 5, true, true);
     // Head
     ctx.fillStyle = '#ffd29a';
@@ -245,6 +256,26 @@ export class Player {
     ctx.fillStyle = '#202832';
     ctx.fillRect(x - 3, y - 38, 6, 12);
     ctx.fillRect(x - 2 + this.facing * 4, y - 40, 4, 6);
+
+    // Soft rim light on the facing side — helps the silhouette pop against
+    // dark backgrounds (volcano, boss) without needing a hard outline.
+    ctx.save();
+    ctx.globalAlpha = 0.22;
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    // Rim along the leading edge of head + torso
+    if (this.facing > 0) {
+      ctx.moveTo(x + 8, y - 45);
+      ctx.quadraticCurveTo(x + 11, y - 38, x + 13, y - 34);
+      ctx.lineTo(x + 13, y - 14);
+    } else {
+      ctx.moveTo(x - 8, y - 45);
+      ctx.quadraticCurveTo(x - 11, y - 38, x - 13, y - 34);
+      ctx.lineTo(x - 13, y - 14);
+    }
+    ctx.stroke();
+    ctx.restore();
 
     // Shield aura
     if (this.shield) {

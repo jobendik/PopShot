@@ -21,6 +21,7 @@ export class Ball {
   fuse: number;
   electricCharge: number;
   smokeTimer: number;
+  squashTime: number;            // remaining seconds of squash-and-stretch after floor bounce
   constructor(x, y, size, type: BallType = 'normal', vx = 0, vy = 0) {
     this.x = x; this.y = y;
     this.size = size;
@@ -35,6 +36,7 @@ export class Ball {
     this.fuse = 0;                                   // explosive fuse
     this.electricCharge = rand(1.5, 3);              // electric ball discharge timer
     this.smokeTimer = 0;                             // smoke ball periodic puffs
+    this.squashTime = 0;
   }
 
   /** Mark for split. Children inherit position, opposite horizontal velocities. */
@@ -83,11 +85,13 @@ export class Ball {
     this.x += this.vx * dt;
     this.y += this.vy * dt;
     this.spin += this.vx * dt * 0.02;
+    if (this.squashTime > 0) this.squashTime = Math.max(0, this.squashTime - dt);
 
     // Floor: arcade-consistent bounce (constant peak height)
     if (this.y + this.r >= GROUND_Y) {
       this.y = GROUND_Y - this.r;
       this.vy = -BALL_BOUNCE[this.size];
+      this.squashTime = 0.18;
       // Lava ball drips on bounce
       if (this.type === 'lava' && Math.random() < 0.6) {
         game.hazards.push(new Hazard('lava', this.x - 18, GROUND_Y - 4, 36, 8, 3.5));
@@ -194,18 +198,27 @@ export class Ball {
 
   draw(ctx) {
     const c = BALL_COLORS[this.type] || BALL_COLORS.normal;
-    // Shadow
-    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    // Shadow — alpha and width scale with how close the ball is to the floor,
+    // giving the player a strong trajectory cue without obscuring the world.
+    const altitude = clamp(GROUND_Y - (this.y + this.r), 0, 400);
+    const shadowAlpha = 0.32 * (1 - altitude / 400) + 0.06;
+    const shadowRX = this.r * (0.75 - altitude / 700);
+    ctx.fillStyle = `rgba(0,0,0,${shadowAlpha.toFixed(3)})`;
     ctx.beginPath();
-    ctx.ellipse(this.x, GROUND_Y + 2, this.r * 0.7, 4, 0, 0, Math.PI * 2);
+    ctx.ellipse(this.x, GROUND_Y + 2, Math.max(6, shadowRX), 4, 0, 0, Math.PI * 2);
     ctx.fill();
+    // Squash-and-stretch — after a floor bounce we squash horizontally and
+    // recover over ~180ms. Fully airborne balls render as perfect circles.
+    const sqz = this.squashTime / 0.18;
+    const rx = this.r * (1 + sqz * 0.28);
+    const ry = this.r * (1 - sqz * 0.24);
     // Body
-    const grad = ctx.createRadialGradient(this.x - this.r * 0.4, this.y - this.r * 0.4, this.r * 0.1, this.x, this.y, this.r);
+    const grad = ctx.createRadialGradient(this.x - rx * 0.4, this.y - ry * 0.4, rx * 0.1, this.x, this.y, rx);
     grad.addColorStop(0, '#fff');
     grad.addColorStop(0.25, c[0]);
     grad.addColorStop(1, c[1]);
     ctx.fillStyle = grad;
-    ctx.beginPath(); ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(this.x, this.y, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
     // Outline
     ctx.strokeStyle = '#1c0010';
     ctx.lineWidth = 2;
@@ -213,11 +226,27 @@ export class Ball {
     // Highlight
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.beginPath();
-    ctx.ellipse(this.x - this.r * 0.35, this.y - this.r * 0.4, this.r * 0.28, this.r * 0.18, -0.4, 0, Math.PI * 2);
+    ctx.ellipse(this.x - rx * 0.35, this.y - ry * 0.4, rx * 0.28, ry * 0.18, -0.4, 0, Math.PI * 2);
     ctx.fill();
 
     // Type icons
     if (this.type === 'electric') {
+      // Pre-discharge warning: the closer to 0 the charge timer is, the brighter
+      // the halo. Below 0.6s remaining the ring strobes white. Gives the player
+      // a clear "about to fire downward" cue.
+      const charge = this.electricCharge;
+      if (charge < 1.2) {
+        const urgency = clamp(1 - charge / 1.2, 0, 1);
+        const strobe = 0.5 + Math.abs(Math.sin(performance.now() / (40 + (1 - urgency) * 120))) * 0.5;
+        ctx.save();
+        ctx.globalAlpha = 0.35 + urgency * 0.55 * strobe;
+        ctx.strokeStyle = '#ffd60a';
+        ctx.lineWidth = 3 + urgency * 4;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.r + 4 + urgency * 4, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
       ctx.strokeStyle = '#fff';
       ctx.lineWidth = 2 + Math.sin(performance.now() / 80) * 1;
       ctx.beginPath();

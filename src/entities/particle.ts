@@ -25,13 +25,30 @@ export class Particle {
     this.life -= dt;
     if (this.life <= 0) this.dead = true;
   }
-  draw(ctx) {
+  draw(ctx: CanvasRenderingContext2D) {
     const a = clamp(this.life / this.maxLife, 0, 1);
-    ctx.globalAlpha = a;
+    const r = this.size * a * 0.6 + 1;
+    // Soft glow halo (faint, large) + bright core (small). Reads as a
+    // glowing spark rather than a sharp pixel — instantly more premium.
+    ctx.save();
+    ctx.globalAlpha = a * 0.45;
     ctx.fillStyle = this.color;
-    const s = this.size * a + 1;
-    ctx.fillRect(this.x - s/2, this.y - s/2, s, s);
-    ctx.globalAlpha = 1;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, r * 2.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = a;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    // Tiny white core for hot center on fresh particles.
+    if (a > 0.6) {
+      ctx.globalAlpha = (a - 0.6) * 1.5;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, r * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 }
 
@@ -54,17 +71,72 @@ export class FloatingText {
     this.life -= dt;
     if (this.life <= 0) this.dead = true;
   }
-  draw(ctx) {
+  draw(ctx: CanvasRenderingContext2D) {
     const a = clamp(this.life / this.maxLife, 0, 1);
+    // Pop-in scale: starts big, settles to 1.0 over the first 150ms of life.
+    const age = 1 - a;
+    const pop = age < 0.15 ? 1.6 - age * 4 : 1.0;
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.scale(pop, pop);
     ctx.globalAlpha = a;
     ctx.font = `bold ${this.size}px sans-serif`;
     ctx.textAlign = 'center';
+    // Soft drop shadow for depth
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillText(this.text, 1, 2);
     ctx.lineWidth = 4;
     ctx.strokeStyle = '#000';
-    ctx.strokeText(this.text, this.x, this.y);
+    ctx.strokeText(this.text, 0, 0);
     ctx.fillStyle = this.color;
-    ctx.fillText(this.text, this.x, this.y);
-    ctx.globalAlpha = 1;
+    ctx.fillText(this.text, 0, 0);
+    ctx.restore();
+  }
+}
+
+/** Expanding radial ring used as pop / explosion flash. Lives briefly, draws
+ *  as a fading circle outline so it reads as "impact at this point" without
+ *  obscuring the rest of the scene. */
+export class Shockwave {
+  x: number;
+  y: number;
+  r: number;
+  maxR: number;
+  life: number;
+  maxLife: number;
+  color: string;
+  dead: boolean;
+  constructor(x: number, y: number, maxR = 60, color = '#ffffff', life = 0.28) {
+    this.x = x; this.y = y;
+    this.r = 0; this.maxR = maxR;
+    this.life = life; this.maxLife = life;
+    this.color = color; this.dead = false;
+  }
+  update(dt: number) {
+    this.life -= dt;
+    if (this.life <= 0) this.dead = true;
+    const t = 1 - this.life / this.maxLife;
+    // Ease-out: fast growth at first, slowing toward maxR.
+    this.r = this.maxR * (1 - Math.pow(1 - t, 2));
+  }
+  draw(ctx: CanvasRenderingContext2D) {
+    const a = clamp(this.life / this.maxLife, 0, 1);
+    ctx.save();
+    ctx.globalAlpha = a * 0.75;
+    ctx.strokeStyle = this.color;
+    ctx.lineWidth = 3 * a + 1;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+    ctx.stroke();
+    // Inner bright flash early in the lifetime
+    if (a > 0.6) {
+      ctx.globalAlpha = (a - 0.6) * 2;
+      ctx.fillStyle = this.color;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.r * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
   }
 }
 

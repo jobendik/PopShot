@@ -62,8 +62,23 @@ export const AudioSys = {
     src.start(t);
   },
   shoot()      { this.beep(880, 0.06, 'square', 0.18, -400); },
-  pop()        { this.beep(520, 0.08, 'triangle', 0.3, -200); this.beep(740, 0.05, 'sine', 0.15, 0); },
+  /** Pop sound — pitch drops as ball size increases for tactile size feedback.
+   *  size 0 (tiny) → bright "tink", size 4 (huge) → deep "thunk". */
+  pop(size: number = 2) {
+    const s = Math.max(0, Math.min(4, size));
+    const lo = 760 - s * 90;        // 760, 670, 580, 490, 400
+    const hi = lo + 220;
+    this.beep(lo, 0.08 + s * 0.012, 'triangle', 0.28 + s * 0.035, -180 - s * 30);
+    this.beep(hi, 0.05, 'sine', 0.14, 0);
+  },
   split()      { this.beep(380, 0.1, 'sawtooth', 0.2, 120); },
+  /** Combo-milestone fanfare: short ascending arpeggio whose pitch rises with the
+   *  milestone level (1 = first milestone). Procedurally synthesized, no assets. */
+  comboHit(level: number) {
+    const offset = (level - 1) * 80;
+    const notes = [392 + offset, 523 + offset, 659 + offset, 784 + offset];
+    notes.forEach((f, i) => setTimeout(() => this.beep(f, 0.1, 'triangle', 0.32), i * 55));
+  },
   pickup()     { this.beep(660, 0.08, 'sine', 0.4, 300); this.beep(990, 0.1, 'sine', 0.3, 200); },
   shieldBreak(){ this.beep(220, 0.2, 'sawtooth', 0.4, -100); },
   hurt()       { this.beep(160, 0.35, 'sawtooth', 0.45, -120); },
@@ -72,4 +87,15 @@ export const AudioSys = {
   levelClear() { [523,659,784,1046].forEach((f,i)=>setTimeout(()=>this.beep(f,0.18,'triangle',0.4),i*80)); },
   warning()    { this.beep(880, 0.07, 'square', 0.25); },
   menu()       { this.beep(660, 0.06, 'square', 0.2); },
+  /** First-pop fanfare — a bigger, brighter, longer arpeggio than the combo
+   *  one. Fires once per player, ever, on the very first ball they pop. */
+  firstPop() {
+    const notes = [523, 659, 784, 1046, 1318];
+    notes.forEach((f, i) => setTimeout(() => this.beep(f, 0.18, 'triangle', 0.4), i * 70));
+  },
+  /** GO! beat at level start — short rising two-note pulse, like a starting bell. */
+  go() {
+    this.beep(660, 0.09, 'triangle', 0.35);
+    setTimeout(() => this.beep(990, 0.13, 'triangle', 0.4), 70);
+  },
 };

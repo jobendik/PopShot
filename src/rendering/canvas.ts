@@ -14,6 +14,87 @@ export function roundRect(ctx, x, y, w, h, r, fill, stroke) {
   if (stroke) ctx.stroke();
 }
 
+/** Ambient atmosphere layer — drifting flecks per world. Procedural and
+ *  allocation-free: particle positions are derived from `i` and `t`, so
+ *  there's no array to manage or GC pressure. Drawn after the silhouettes
+ *  but before the floor so they sit "in front of" the parallax. */
+function drawAmbience(ctx: CanvasRenderingContext2D, theme: ThemeName, t: number) {
+  if (theme === 'arctic') {
+    // Drifting snowflakes
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    for (let i = 0; i < 32; i++) {
+      const seedX = (i * 113) % W;
+      const wobble = Math.sin(t * 0.6 + i * 1.3) * 18;
+      const x = (seedX + wobble + W) % W;
+      const y = ((t * (18 + (i % 5) * 3) + i * 47) % (GROUND_Y - CEILING_Y)) + CEILING_Y;
+      const r = 1 + (i % 3) * 0.6;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    }
+  } else if (theme === 'volcano') {
+    // Rising embers — orange dots that drift upward and fade
+    for (let i = 0; i < 24; i++) {
+      const px = (i * 167 + Math.sin(t * 1.2 + i) * 22) % W;
+      const rise = (t * (50 + (i % 4) * 10) + i * 73) % (GROUND_Y - CEILING_Y);
+      const y = GROUND_Y - 6 - rise;
+      const life = 1 - rise / (GROUND_Y - CEILING_Y);
+      ctx.fillStyle = `rgba(255,${100 + Math.floor(life * 90)},0,${(life * 0.7).toFixed(3)})`;
+      ctx.beginPath(); ctx.arc(px, y, 1.6 + life * 1.4, 0, Math.PI * 2); ctx.fill();
+    }
+  } else if (theme === 'desert') {
+    // Dust motes drifting right
+    for (let i = 0; i < 28; i++) {
+      const px = (i * 89 + t * (12 + (i % 4) * 4)) % W;
+      const py = CEILING_Y + 30 + ((i * 53) % (GROUND_Y - CEILING_Y - 60));
+      const wob = Math.sin(t * 0.8 + i) * 6;
+      ctx.fillStyle = `rgba(255,220,150,${0.18 + (i % 3) * 0.06})`;
+      ctx.beginPath(); ctx.arc(px, py + wob, 1.5 + (i % 2), 0, Math.PI * 2); ctx.fill();
+    }
+  } else if (theme === 'city') {
+    // Slow neon flecks rising
+    for (let i = 0; i < 20; i++) {
+      const px = (i * 137) % W;
+      const rise = (t * (30 + (i % 3) * 8) + i * 91) % (GROUND_Y - CEILING_Y - 40);
+      const y = GROUND_Y - 20 - rise;
+      const hue = (i * 47) % 360;
+      ctx.fillStyle = `hsla(${hue}, 90%, 65%, 0.35)`;
+      ctx.beginPath(); ctx.arc(px, y, 1.2 + (i % 2) * 0.8, 0, Math.PI * 2); ctx.fill();
+    }
+  } else if (theme === 'beach') {
+    // Sparkling water reflections on the sea band
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    for (let i = 0; i < 14; i++) {
+      const px = (i * 73 + (t * 25) % 73) % W;
+      const py = GROUND_Y - 75 + Math.sin(t * 2 + i) * 3;
+      const flicker = 0.4 + Math.abs(Math.sin(t * 4 + i)) * 0.6;
+      ctx.globalAlpha = flicker * 0.7;
+      ctx.beginPath(); ctx.arc(px, py, 1.5, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  } else if (theme === 'airship') {
+    // Wind streaks — short thin diagonal dashes drifting left
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 22; i++) {
+      const x = (i * 71 + W - (t * 60) % W) % W;
+      const y = CEILING_Y + 20 + ((i * 41) % (GROUND_Y - CEILING_Y - 40));
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + 10, y + 2);
+      ctx.stroke();
+    }
+  } else if (theme === 'boss') {
+    // Cosmic twinkles + slow drift toward center
+    for (let i = 0; i < 40; i++) {
+      const baseX = (i * 53) % W;
+      const baseY = CEILING_Y + ((i * 71) % (GROUND_Y - CEILING_Y));
+      const pull = Math.sin(t * 0.4 + i) * 6;
+      const flicker = 0.3 + Math.abs(Math.sin(t * 2 + i * 0.7)) * 0.7;
+      ctx.fillStyle = `rgba(255,255,255,${flicker * 0.55})`;
+      ctx.beginPath(); ctx.arc(baseX + pull, baseY, 1 + (i % 2) * 0.5, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+}
+
 export function drawBackground(ctx, theme, t) {
   const T = THEMES[theme];
   // Sky gradient
@@ -152,6 +233,9 @@ export function drawBackground(ctx, theme, t) {
     ctx.fillStyle = '#b08968';
     ctx.fillRect(W / 2 - 90, GROUND_Y - 88, 180, 34);
   }
+
+  // Ambient atmosphere layer (theme-specific drift particles)
+  drawAmbience(ctx, theme, t);
 
   // Floor
   const fg = ctx.createLinearGradient(0, GROUND_Y, 0, H);

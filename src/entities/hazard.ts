@@ -105,6 +105,26 @@ export class Hazard {
         ctx.fillRect(this.x + 6, this.y + this.h - 14, this.w - 12, 3);
       }
     } else if (this.type === 'falling_rock') {
+      // Landing-point telegraph: pulsing ring on the floor directly under the
+      // rock so the player can dodge laterally. Hidden once the rock has landed
+      // (small life remaining → impact frame is already happening).
+      if (this.y + this.h < GROUND_Y - 4 && this.life > 0.4) {
+        const cx = this.x + this.w / 2;
+        const pulse = 0.5 + Math.abs(Math.sin(performance.now() / 110)) * 0.5;
+        ctx.save();
+        ctx.globalAlpha = 0.35 + pulse * 0.4;
+        ctx.strokeStyle = '#ff4d6d';
+        ctx.lineWidth = 2 + pulse * 2;
+        ctx.beginPath();
+        ctx.ellipse(cx, GROUND_Y + 1, this.w * 0.85, 6, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 0.2 + pulse * 0.3;
+        ctx.fillStyle = '#ff4d6d';
+        ctx.beginPath();
+        ctx.ellipse(cx, GROUND_Y + 1, this.w * 0.5, 4, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
       ctx.fillStyle = '#5c4d46';
       ctx.strokeStyle = '#211a18';
       ctx.lineWidth = 2;

@@ -50,11 +50,37 @@ export const State = {
   GAME_OVER: 'game_over',
   BOSS_DEFEATED: 'boss_defeated',
   VICTORY: 'victory',
+  DAILY_INTRO: 'daily_intro',
+  DAILY_RESULT: 'daily_result',
 } as const;
+
+// Daily Challenge modifiers. The pool is intentionally small; each modifier
+// changes one tactical dimension without rewriting physics.
+export const DAILY_MODIFIERS = [
+  { id: 'double_score',  label: 'DOUBLE SCORE',  desc: 'Every pop scores ×2.' },
+  { id: 'no_pickups',    label: 'NO PICKUPS',    desc: 'No weapons or power-ups will spawn.' },
+  { id: 'tiny_hurtbox',  label: 'TINY HURTBOX',  desc: 'You are a smaller target.' },
+  { id: 'big_bubbles',   label: 'BIG BUBBLES',   desc: 'Every ball starts one size larger.' },
+  { id: 'sudden_death',  label: 'SUDDEN DEATH',  desc: 'One life. No retries.' },
+] as const;
+
+/** Why the player died. Surfaced to the player on the game-over screen so
+ *  the loss is intelligible and "fair" rather than mysterious. */
+export type DeathReason = 'ball' | 'hazard' | 'crab' | 'boss' | 'timeout' | 'unknown';
+
+export const DEATH_REASON_TEXT: Record<DeathReason, string> = {
+  ball:    'A bouncing ball reached you.',
+  hazard:  'A hazard caught you.',
+  crab:    'A wandering crab knocked you out.',
+  boss:    'The boss crushed you.',
+  timeout: 'The timer ran out.',
+  unknown: 'You were defeated.',
+};
 
 export type BallType = keyof typeof BALL_COLORS;
 export type ThemeName = keyof typeof THEMES;
 export type GameState = (typeof State)[keyof typeof State];
-export type GameMode = 'tour' | 'score_attack' | 'panic';
+export type GameMode = 'tour' | 'score_attack' | 'panic' | 'daily';
+export type DailyModifierId = (typeof DAILY_MODIFIERS)[number]['id'];
 export type WeaponType = 'harpoon' | 'double' | 'machinegun' | 'laser' | 'flame' | 'shotgun' | 'shuriken' | 'bomb';
 export type PickupType = WeaponType | 'shield' | 'score' | 'life' | 'time' | 'slowtime' | 'freeze' | 'clearsmoke' | 'magnet' | 'combo';
