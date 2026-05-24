@@ -14,7 +14,7 @@ import { Projectile } from './entities/projectile';
 import { emit } from './systems/analytics';
 import { AudioSys } from './systems/audio';
 import { clearLevel, explodeProjectile, killPlayer, popBall } from './systems/combat';
-import { consumePressed, keysPressed, pointer } from './systems/input';
+import { consumePressed, flushHoverSound, keysPressed, pointer } from './systems/input';
 import { Storage } from './systems/storage';
 import { pickDailyChallenge, type DailyPick } from './systems/daily';
 // Aliased to Sdk to avoid colliding with the `Platform` entity class above.
@@ -560,6 +560,13 @@ export class Game {
     // Mute toggle works in every state.
     if (consumePressed('KeyM')) AudioSys.toggle();
 
+    // Decay shake/flash globally so they don't get stuck while a non-PLAYING
+    // state (e.g. PLAYER_DEAD's hit-pause) holds the gameplay update path.
+    // Without this, a player death set `shake = 18` would jitter forever until
+    // respawn because updatePlaying's decay tick never ran.
+    if (this.shake > 0) this.shake = Math.max(0, this.shake - dt * 30);
+    if (this.flash > 0) this.flash = Math.max(0, this.flash - dt);
+
     switch (this.state) {
       case State.MAIN_MENU:    updateMainMenu(this); break;
       case State.MODE_SELECT:  updateModeSelect(this); break;
@@ -605,10 +612,14 @@ export class Game {
     ctx.clearRect(0, 0, W, H);
 
     // Shake offset (suppressed entirely when the accessibility flag is set).
+    // SHAKE_SCALE damps every call site uniformly — individual values in
+    // combat/ball/pickup/boss were tuned hot; this is the global mix knob.
     let sx = 0, sy = 0;
     if (this.shake > 0 && !Storage.data.reducedMotion) {
-      sx = rand(-this.shake, this.shake);
-      sy = rand(-this.shake, this.shake);
+      const SHAKE_SCALE = 0.5;
+      const amp = this.shake * SHAKE_SCALE;
+      sx = rand(-amp, amp);
+      sy = rand(-amp, amp);
     }
     ctx.translate(sx, sy);
 
@@ -646,5 +657,9 @@ export class Game {
       ctx.fillRect(0, 0, W, H);
       ctx.globalAlpha = 1;
     }
+
+    // After all state-specific renders had a chance to call pointerOver(),
+    // emit a single hover SFX if the cursor crossed onto a new button.
+    flushHoverSound();
   }
 }

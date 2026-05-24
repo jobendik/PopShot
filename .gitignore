@@ -4,3 +4,14 @@ dist/
 vite-dev.log
 vite-dev.err
 .DS_Store
+
+# Source audio libraries — extracted into public/sfx & public/music; the
+# archives/working copies themselves don't belong in the repo.
+/Bubble Circuit.mp3
+/Sonniss.com-GDC2024-GameAudioBundle*.zip
+/FilmCow Designed SFX.zip
+/FilmCow Recorded SFX.zip
+/FilmCow Recorded SFX/
+/JDSherbert - Ultimate UI SFX Pack (FREE).zip
+/kenney_ui-audio*.zip
+/Shapeforms Audio Free Sound Effects.zip

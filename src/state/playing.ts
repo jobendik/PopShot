@@ -130,9 +130,9 @@ export function updatePlaying(game: Game, dt: number) {
     }
   }
 
-  // Effects timers
-  if (game.shake > 0) game.shake = Math.max(0, game.shake - dt * 30);
-  if (game.flash > 0) game.flash = Math.max(0, game.flash - dt);
+  // shake/flash decay now lives in game.update() so it ticks across every
+  // state — without that, hitting PLAYER_DEAD with shake=18 leaves the camera
+  // jittering until respawn.
 
   // --- Entity updates ---
   for (const p of [game.player, game.player2]) {

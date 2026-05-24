@@ -240,10 +240,28 @@ export function pointerHit(x: number, y: number, w: number, h: number) {
       && pointer.pressedY >= y && pointer.pressedY <= y + h;
 }
 
-/** Rect hover test against current pointer position. */
+/** Rect hover test against current pointer position. As a side effect, records
+ *  the hovered rect so flushHoverSound() (called once per render frame) can
+ *  fire a single hover SFX when the cursor crosses into a different button. */
 export function pointerOver(x: number, y: number, w: number, h: number) {
-  return pointer.x >= x && pointer.x <= x + w
-      && pointer.y >= y && pointer.y <= y + h;
+  const over = pointer.x >= x && pointer.x <= x + w
+            && pointer.y >= y && pointer.y <= y + h;
+  if (over) _frameHoverKey = x + ',' + y + ',' + w + ',' + h;
+  return over;
+}
+
+let _frameHoverKey: string | null = null;
+let _lastHoverKey: string | null = null;
+
+/** Call once per render frame, after the state's draw runs. Fires AudioSys.hover()
+ *  on the frame the cursor transitions onto a new button (or back onto one after
+ *  leaving). No-op on touch / when nothing is hovered. */
+export function flushHoverSound() {
+  if (_frameHoverKey && _frameHoverKey !== _lastHoverKey) {
+    AudioSys.hover();
+  }
+  _lastHoverKey = _frameHoverKey;
+  _frameHoverKey = null;
 }
 
 /** Called once per frame from game.update() while in PLAYING. */
