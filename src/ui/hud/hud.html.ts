@@ -28,6 +28,7 @@ interface Refs {
   root: HTMLElement;
   bar: HTMLElement;
   scoreValue: HTMLElement;
+  scoreDelta: HTMLElement;        // small "+N" pulse next to the score on each pop
   weaponName: HTMLElement;
   weaponAmmo: HTMLElement;
   shieldChip: HTMLElement;
@@ -37,6 +38,8 @@ interface Refs {
   rainbow: HTMLElement;
   rainbowFill: HTMLElement;
   combo: HTMLElement;
+  comboRing: SVGCircleElement;    // foreground ring whose stroke-dashoffset = combo time remaining
+  comboValue: HTMLElement;        // the "×N" text portion of the combo chip
   lives: HTMLElement;
   levelName: HTMLElement;
   pauseBtn: HTMLElement;
@@ -80,6 +83,7 @@ export function buildHUD(game: Game): HTMLElement {
         <div class="hud__score-wrap">
           <span class="hud__score-label">SCORE</span>
           <span class="hud__score-value" data-role="score">0000000</span>
+          <span class="hud__score-delta" data-role="score-delta"></span>
         </div>
         <div class="hud__weapon-wrap">
           <span class="hud__weapon-name is-default" data-role="weapon-name">HARPOON</span>
@@ -96,7 +100,18 @@ export function buildHUD(game: Game): HTMLElement {
         <div class="hud__rainbow" data-role="rainbow" hidden>
           <div class="hud__rainbow-fill" data-role="rainbow-fill"></div>
         </div>
-        <div class="hud__combo" data-role="combo">COMBO ×0</div>
+        <div class="hud__combo" data-role="combo">
+          <div class="hud__combo-ring">
+            <svg viewBox="0 0 36 36">
+              <circle class="hud__combo-ring-bg" cx="18" cy="18" r="16"></circle>
+              <circle class="hud__combo-ring-fg" data-role="combo-ring" cx="18" cy="18" r="16" pathLength="100"></circle>
+            </svg>
+          </div>
+          <div class="hud__combo-info">
+            <div class="hud__combo-label">COMBO</div>
+            <div class="hud__combo-value" data-role="combo-value">×0</div>
+          </div>
+        </div>
       </div>
       <div class="hud__right">
         <div class="hud__lives" data-role="lives"></div>
@@ -117,6 +132,7 @@ export function buildHUD(game: Game): HTMLElement {
     root,
     bar:          root.querySelector('.hud__bar') as HTMLElement,
     scoreValue:   root.querySelector('[data-role="score"]') as HTMLElement,
+    scoreDelta:   root.querySelector('[data-role="score-delta"]') as HTMLElement,
     weaponName:   root.querySelector('[data-role="weapon-name"]') as HTMLElement,
     weaponAmmo:   root.querySelector('[data-role="weapon-ammo"]') as HTMLElement,
     shieldChip:   root.querySelector('[data-role="shield"]') as HTMLElement,
@@ -126,6 +142,8 @@ export function buildHUD(game: Game): HTMLElement {
     rainbow:      root.querySelector('[data-role="rainbow"]') as HTMLElement,
     rainbowFill:  root.querySelector('[data-role="rainbow-fill"]') as HTMLElement,
     combo:        root.querySelector('[data-role="combo"]') as HTMLElement,
+    comboRing:    root.querySelector('[data-role="combo-ring"]') as unknown as SVGCircleElement,
+    comboValue:   root.querySelector('[data-role="combo-value"]') as HTMLElement,
     lives:        root.querySelector('[data-role="lives"]') as HTMLElement,
     levelName:    root.querySelector('[data-role="level-name"]') as HTMLElement,
     pauseBtn:     root.querySelector('[data-role="pause-btn"]') as HTMLElement,
@@ -167,6 +185,7 @@ export function syncHUD(game: Game) {
     }
     cached.score = game.score;
   }
+
 
   // ---- Weapon / ammo / shield ----
   const p = game.player;
@@ -219,17 +238,28 @@ export function syncHUD(game: Game) {
     }
   }
 
-  // ---- Combo chip ----
+  // ---- Combo chip + ring meter ----
+  // Combo decay window is 4 seconds (see playing.ts:91) — the ring's
+  // foreground stroke-dashoffset interpolates 0 (full) to 100 (empty) as
+  // comboDecay drains. We write the offset every frame the combo is
+  // active so the drain reads smoothly; the value is cheap to set.
   if (game.combo !== cached.combo) {
     if (game.combo > 1) {
       refs.combo.classList.add('is-visible');
-      refs.combo.textContent = '×' + game.combo + ' COMBO';
+      refs.comboValue.textContent = '×' + game.combo;
       refs.combo.classList.toggle('is-mid', game.combo >= 5 && game.combo < 10);
       refs.combo.classList.toggle('is-hot', game.combo >= 10);
     } else {
       refs.combo.classList.remove('is-visible');
     }
     cached.combo = game.combo;
+  }
+  if (game.combo > 1) {
+    const ratio = Math.max(0, Math.min(1, game.comboDecay / 4));
+    const offset = (100 - ratio * 100).toFixed(1);
+    if (refs.comboRing.getAttribute('stroke-dashoffset') !== offset) {
+      refs.comboRing.setAttribute('stroke-dashoffset', offset);
+    }
   }
 
   // ---- Lives ----
@@ -293,4 +323,26 @@ export function syncHUD(game: Game) {
     }
     cached.effectsKey = key;
   }
+}
+
+/**
+ * Pulse the small "+N" delta tag next to the HUD score. Called by the
+ * combat system on every pop so the player sees both the world-space
+ * floating "+150" AND a HUD-anchored confirmation of the score gain.
+ *
+ * Implementation: set the text + force-fire the CSS transition by
+ * removing the class, forcing reflow, re-adding it. Same pattern as
+ * the score-bump animation.
+ */
+export function pulseScoreDelta(value: number): void {
+  if (!refs) return;
+  refs.scoreDelta.textContent = '+' + value;
+  // First reset to initial state (opacity 0, no transition) — the .is-fired
+  // class disables transitions for the snap, then we remove it next frame
+  // so the natural CSS transition (opacity 0.7s, transform 0.7s) runs the
+  // float-up + fade-out.
+  refs.scoreDelta.classList.add('is-fired');
+  // Force reflow so the next class change actually triggers a transition.
+  void refs.scoreDelta.offsetWidth;
+  refs.scoreDelta.classList.remove('is-fired');
 }

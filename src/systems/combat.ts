@@ -12,6 +12,8 @@ import { medalFor, recordDailyAttempt } from './daily';
 import { Platform as Sdk } from './platform';
 import { Storage } from './storage';
 import { markTitlesSeen, newlyEarnedTitles } from './titles';
+import { FX } from '../ui/overlay/effects';
+import { pulseScoreDelta } from '../ui/hud/hud.html';
 import type { Game } from '../game';
 
 /**
@@ -28,6 +30,11 @@ export function popBall(game: Game, ball: Ball, source: any) {
   const gained = Math.round(baseScore * comboMult * dailyMult);
   game.addScore(gained);
   game.floatingTexts.push(new FloatingText(ball.x, ball.y - 10, '+' + gained, game.combo >= 5 ? '#ffd60a' : '#fff'));
+  // HUD-anchored "+N" pulse next to the score. The world-space FloatingText
+  // above shows it AT the pop; this confirms it on the HUD so the player's
+  // eye finds the score increase even if they were looking away from the
+  // ball at the moment of impact.
+  pulseScoreDelta(gained);
 
   // ---------- Multi-pop chain bookkeeping ----------
   // Every popBall call extends a short-lived window. When the window closes
@@ -188,6 +195,24 @@ export function popBall(game: Game, ball: Ball, source: any) {
       game.shockwaves.push(new Shockwave(W/2, H/2 - 10, 180 + milestone * 40, tint, 0.45 + milestone * 0.05));
       game.flash = Math.max(game.flash, 0.12 + milestone * 0.05);
       game.shake = Math.max(game.shake, 4 + milestone * 2);
+      // Hit-stop boost — escalates with the milestone tier. tier 1 = 100ms,
+      // tier 4 = 220ms. Stacks with the per-pop tier above via Math.max.
+      game.hitPause = Math.max(game.hitPause, 0.06 + milestone * 0.04);
+      // Medal callout — slides in from the right with tier color so the
+      // player has a persistent visual marker of the achievement (the
+      // world-space floating text fades quickly; the medal hangs for ~3s).
+      const medalTier = (['silver', 'gold', 'plat', 'mythic'] as const)[milestone - 1];
+      FX.medal(label.replace('!', ''), game.combo + ' chain', medalTier, '+' + Math.round(gained));
+      // Top-center toast for the biggest tiers — gives the moment a second
+      // beat of UI feedback. Only fires for milestones 3+ (INSANE / GODLIKE)
+      // so we don't spam toasts on every 5-chain.
+      if (milestone >= 3) {
+        FX.toast('success', label.replace('!', ''), 'Combo chain of ' + game.combo);
+      }
+      // Mega crit visual on the highest tier — chromatic-aberration flash
+      // sells "this is a screen-wide moment" in addition to the existing
+      // shake/flash. Restricted to GODLIKE only so it stays meaningful.
+      if (milestone === 4) FX.chromAb();
       AudioSys.comboHit(milestone);
     }
   }
@@ -243,22 +268,30 @@ export function popBall(game: Game, ball: Ball, source: any) {
     }
     ball.dead = true;
   }
-  game.hitPause = 0.04;
+  // Hit-stop tiering — bigger balls produce more pause, and the last
+  // ball on the board gets an extra kick so the "you cleared it!" beat
+  // lands. Combo milestones below already stack their own boost on top.
+  // Range without boosts: 30ms (size 0) → 78ms (size 4).
+  const lastBallBonus = isLastBall ? 0.04 : 0;
+  game.hitPause = Math.max(game.hitPause, 0.03 + ball.size * 0.012 + lastBallBonus);
 
   // Title-unlock detection. Most pops won't unlock anything — newlyEarnedTitles
   // returns [] in steady state — so this is cheap. When something DOES unlock,
-  // show ONE toast (highest-priority new title) and mark all of them as seen so
-  // we never spam the screen with multiple chips for the same pop.
+  // fire a mythic-tier medal callout (the highest-prestige tier) AND a top-
+  // center toast — title unlocks are the rarest moments of the game and
+  // deserve maximum UI flair. The existing world-space floating text is
+  // kept as well so the player sees it AT the pop location too.
   const newTitles = newlyEarnedTitles();
   if (newTitles.length > 0) {
     const t = newTitles[0]; // priority-ordered already
     game.floatingTexts.push(new FloatingText(W/2, H/2 - 40, 'TITLE UNLOCKED', '#9be7ff', 16));
     game.floatingTexts.push(new FloatingText(W/2, H/2 - 8,  t.label.toUpperCase(), '#ffd60a', 32));
-    // Lengthen this toast so it reads at any sensible glance.
     const last = game.floatingTexts[game.floatingTexts.length - 1];
     last.life = 2.0; last.maxLife = 2.0;
     const second = game.floatingTexts[game.floatingTexts.length - 2];
     second.life = 2.0; second.maxLife = 2.0;
+    FX.medal(t.label, 'New title earned', 'mythic', 'TITLE');
+    FX.toast('info', 'TITLE UNLOCKED', t.label);
     AudioSys.firstPop(); // reuse the bigger-than-combo fanfare — it sounds right
     markTitlesSeen(newTitles.map(n => n.id));
   }
@@ -321,8 +354,20 @@ export function killPlayer(game: Game, player: Player, reason: DeathReason = 'un
     const a = Math.random() * Math.PI * 2, s = rand(80, 220);
     game.particles.push(new Particle(player.x, player.y - 24, Math.cos(a)*s, Math.sin(a)*s, 0.7, '#ff4d6d', 6, 200));
   }
+  // Chromatic-aberration flash — the strongest "ouch" signal we have.
+  // Reserved for genuine deaths (shield-break above already returned).
+  FX.chromAb();
+  // Damage-flash overlay through the FX layer — the canvas-side `game.flash`
+  // already does a white tint; this adds a radial red vignette pulse on top.
+  FX.damageFlash();
   game.combo = 0;
   game.lives--;
+  // Life-lost toast — informs the player how many lives remain. Suppressed
+  // on the final death since the GAME OVER screen takes over immediately
+  // and the toast would race with it.
+  if (game.lives > 0) {
+    FX.toast('danger', 'LIFE LOST', game.lives + ' remaining');
+  }
   if (game.lives <= 0) {
     emit('run.fail', { mode: game.mode, level: game.levelIndex, score: game.score, reason });
     // Daily challenge: any failed run is still a logged attempt; go to the result screen.
@@ -379,9 +424,25 @@ export function clearLevel(game: Game) {
     game.unlockedLevel = Math.max(game.unlockedLevel, game.levelIndex + 1);
     Storage.data.unlockedLevel = game.unlockedLevel;
     Storage.save();
+    // Medal callout for the run's tier earned. The level-clear screen
+    // shows the full breakdown; this is the in-the-moment celebration.
+    // Bronze/silver/gold map directly to the existing medal tier values.
+    if (newTier > 0) {
+      const tierName = (['bronze', 'silver', 'gold'] as const)[newTier - 1];
+      const upgrade  = newTier > prevTier;
+      FX.medal(
+        upgrade ? 'NEW MEDAL' : 'MEDAL EARNED',
+        L.name + ' — ' + tierName.toUpperCase(),
+        tierName,
+        '+' + total,
+      );
+    }
+    // Level-clear toast for momentum — "WAVE CLEAR" feel from ricochet.
+    FX.toast('success', 'LEVEL CLEAR', L.name + ' +' + total);
   } else if (L && game.mode === 'score_attack') {
     const cur = Storage.data.bestTour[L.id] || 0;
     if (game.score > cur) { Storage.data.bestTour[L.id] = game.score; Storage.save(); }
+    FX.toast('success', 'STAGE CLEAR', '+' + total);
   }
 
   // NEW COMBO BEST detection: compare this run's combo apex against the

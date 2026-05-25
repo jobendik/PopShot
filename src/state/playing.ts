@@ -11,6 +11,7 @@ import { consumePauseTap, consumePressed, isTouchDevice, keysPressed, pointer, t
 import { Platform as Sdk } from '../systems/platform';
 import { Storage } from '../systems/storage';
 import { clamp } from '../utils';
+import { FX } from '../ui/overlay/effects';
 import type { Game } from '../game';
 
 export function updatePlaying(game: Game, dt: number) {
@@ -96,6 +97,13 @@ export function updatePlaying(game: Game, dt: number) {
       // Light shockwave to draw the eye, but no screen flash/shake (those are
       // reserved for combo milestones — keeping the hierarchy clear).
       game.shockwaves.push(new Shockwave(game.chainCx, game.chainCy, 80 + n * 18, color, 0.4));
+      // Multi-pop medal — tier scales with chain size so the player gets
+      // a persistent visual marker for the bigger chains. Double/triple
+      // pops don't get medals (too frequent); QUAD+ does.
+      if (n >= 4) {
+        const tier = n <= 4 ? 'silver' : n <= 7 ? 'gold' : 'mythic';
+        FX.medal(label, n + ' balls at once', tier, '+' + gained);
+      }
       // Lifetime stats for the Detonator title and post-game brag.
       if (n > (Storage.data.bestMultiPop || 0)) {
         Storage.data.bestMultiPop = n;

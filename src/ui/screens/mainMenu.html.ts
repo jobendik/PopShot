@@ -26,7 +26,35 @@ import {
 } from '../../systems/daily';
 import { Storage } from '../../systems/storage';
 import { currentTitle } from '../../systems/titles';
+import { FX } from '../overlay/effects';
 import type { Game } from '../../game';
+
+/** Once-per-session guard for menu-entry toasts. Reset on page load so
+ *  refreshing the page re-fires them; preserved across menu↔gameplay
+ *  navigation so they don't spam every time the player returns to menu. */
+let menuToastsFired = false;
+
+/** Fire the welcome-back and daily-ready toasts a beat after the menu
+ *  becomes visible. Staggered so they don't pile on top of each other.
+ *  Guarded by menuToastsFired so each only shows once per session. */
+function fireMenuEntryToasts(): void {
+  if (menuToastsFired) return;
+  menuToastsFired = true;
+  const streak = liveStreak();
+  const welcome = getWelcomeBackBanner();
+  // Welcome-back toast — fires first (~800ms after menu shows) if the
+  // returning-player detector found a streak or comeback worth celebrating.
+  if (welcome) {
+    setTimeout(() => FX.toast('success', 'WELCOME BACK', welcome.subtitle), 800);
+  } else if (streak > 0) {
+    setTimeout(() => FX.toast('success', 'STREAK', streak + '-day streak alive'), 800);
+  }
+  // Daily-ready toast — second beat (~2400ms) if the player hasn't done
+  // today's challenge yet. Reinforces the daily as a returning-player hook.
+  if (!hasPlayedToday()) {
+    setTimeout(() => FX.toast('info', 'DAILY READY', 'Today\'s challenge awaits'), 2400);
+  }
+}
 
 const IDLE_HINTS = [
   '🔥 Daily streaks grow over consecutive days — don\'t miss a day.',
@@ -64,7 +92,51 @@ export function buildMainMenu(game: Game): HTMLElement {
   brand.innerHTML = `<span class="menu__brand-tag">Arcade Edition</span>`;
   root.appendChild(brand);
 
-  // --- Title chip (top-left, populated on sync) ---
+  // --- Profile card (top-left) ---
+  // Replaces the legacy title-chip with a richer card showing avatar +
+  // name + current title + marksman rank progress + 3 key stats. Inspired
+  // by ricochet.html's profile card, adapted to Bubble Breaker's actual
+  // progression model (lifetime pops drives the rank, no coins/gems).
+  const profile = document.createElement('div');
+  profile.className = 'menu__profile';
+  profile.innerHTML = `
+    <div class="menu__profile-header">
+      <div class="menu__profile-avatar">BB</div>
+      <div class="menu__profile-meta">
+        <div class="menu__profile-name">PLAYER</div>
+        <span class="menu__profile-title" data-role="profile-title" hidden></span>
+      </div>
+    </div>
+    <div class="menu__profile-rank-wrap">
+      <div class="menu__profile-rank-labels">
+        <span>LVL <b data-role="profile-lvl">1</b></span>
+        <span><b data-role="profile-xp-cur">0</b> / <span data-role="profile-xp-max">25</span> POPS</span>
+      </div>
+      <div class="menu__profile-rank-bar">
+        <div class="menu__profile-rank-fill" data-role="profile-rank-fill" style="width:0%"></div>
+      </div>
+    </div>
+    <div class="menu__profile-stats">
+      <div class="menu__profile-stat">
+        <div class="menu__profile-stat-label">HIGH SCORE</div>
+        <div class="menu__profile-stat-value" data-role="profile-stat-score">0</div>
+      </div>
+      <div class="menu__profile-stat">
+        <div class="menu__profile-stat-label">LEVELS</div>
+        <div class="menu__profile-stat-value" data-role="profile-stat-levels">0</div>
+      </div>
+      <div class="menu__profile-stat">
+        <div class="menu__profile-stat-label">BEST COMBO</div>
+        <div class="menu__profile-stat-value" data-role="profile-stat-combo">×0</div>
+      </div>
+    </div>
+  `;
+  root.appendChild(profile);
+
+  // Legacy title chip — kept in the DOM but always hidden, since the
+  // profile card now owns title display. Removing it entirely would
+  // require touching the syncMainMenu refs object, so we just leave it
+  // dormant for backward-compatibility with the existing sync code.
   const titleChip = document.createElement('div');
   titleChip.className = 'menu__title-chip';
   titleChip.hidden = true;
@@ -211,6 +283,15 @@ export function buildMainMenu(game: Game): HTMLElement {
     dailyStreak: dailyBtn.querySelector('[data-role="daily-streak"]')  as HTMLElement,
     dailyBadge:  dailyBtn.querySelector('[data-role="daily-badge"]')   as HTMLElement,
     footerHint:  footer.querySelector('[data-role="footer-hint"]')     as HTMLElement,
+    // Profile card refs
+    profileTitle:    profile.querySelector('[data-role="profile-title"]')     as HTMLElement,
+    profileLvl:      profile.querySelector('[data-role="profile-lvl"]')       as HTMLElement,
+    profileXpCur:    profile.querySelector('[data-role="profile-xp-cur"]')    as HTMLElement,
+    profileXpMax:    profile.querySelector('[data-role="profile-xp-max"]')    as HTMLElement,
+    profileRankFill: profile.querySelector('[data-role="profile-rank-fill"]') as HTMLElement,
+    profileStatScore:  profile.querySelector('[data-role="profile-stat-score"]')  as HTMLElement,
+    profileStatLevels: profile.querySelector('[data-role="profile-stat-levels"]') as HTMLElement,
+    profileStatCombo:  profile.querySelector('[data-role="profile-stat-combo"]')  as HTMLElement,
   };
   (root as any).__refs = refs;
   (root as any).__lastInputT = 0;
@@ -225,6 +306,41 @@ interface Refs {
   playBtn: HTMLElement; playLabel: HTMLElement; playSub: HTMLElement;
   dailyBtn: HTMLElement; dailySub: HTMLElement; dailyStreak: HTMLElement; dailyBadge: HTMLElement;
   footerHint: HTMLElement;
+  profileTitle: HTMLElement;
+  profileLvl: HTMLElement; profileXpCur: HTMLElement; profileXpMax: HTMLElement;
+  profileRankFill: HTMLElement;
+  profileStatScore: HTMLElement; profileStatLevels: HTMLElement; profileStatCombo: HTMLElement;
+}
+
+/** Compute the player's marksman tier from lifetime pops. 25 pops per
+ *  level (so the bar moves visibly in early sessions), capped at 99 so
+ *  the display never overflows. */
+function computeRank(pops: number): { level: number; cur: number; max: number; ratio: number } {
+  const POPS_PER_LEVEL = 25;
+  const level = Math.min(99, Math.floor(pops / POPS_PER_LEVEL) + 1);
+  const cur   = pops - (level - 1) * POPS_PER_LEVEL;
+  const max   = POPS_PER_LEVEL;
+  const ratio = level >= 99 ? 1 : cur / max;
+  return { level, cur, max, ratio };
+}
+
+/** Aggregate best single-run score across tour levels, score-attack,
+ *  panic-score, and boss-rush. Used for the HIGH SCORE stat. */
+function computeHighScore(): number {
+  let best = 0;
+  if (Storage.data.bestScoreAttack > best) best = Storage.data.bestScoreAttack;
+  if (Storage.data.bestPanicScore > best)  best = Storage.data.bestPanicScore;
+  if ((Storage.data.bestBossRush || 0) > best) best = Storage.data.bestBossRush || 0;
+  const bt = Storage.data.bestTour || {};
+  for (const k in bt) if (bt[k] > best) best = bt[k];
+  return best;
+}
+
+/** Compact number formatter for the stat values — 12480 → "12.5k". */
+function fmtCompact(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 1_000_000) return (n / 1000).toFixed(n < 10_000 ? 1 : 0).replace(/\.0$/, '') + 'k';
+  return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'm';
 }
 
 /** Per-frame sync — runs only while the menu is the active screen. Cheap:
@@ -232,6 +348,10 @@ interface Refs {
 export function syncMainMenu(game: Game, root: HTMLElement) {
   const refs = (root as any).__refs as Refs;
   if (!refs) return;
+
+  // Fire the once-per-session entry toasts (welcome-back, daily-ready).
+  // Cheap to call every frame — guarded by an internal flag.
+  fireMenuEntryToasts();
 
   // --- PLAY / CONTINUE label ---
   const resume = getResumeLevel(game);
@@ -266,14 +386,34 @@ export function syncMainMenu(game: Game, root: HTMLElement) {
     refs.welcome.hidden = true;
   }
 
-  // --- Title chip ---
+  // --- Title chip (legacy — always hidden now; profile card owns title display) ---
   const title = currentTitle();
+  refs.titleChip.hidden = true;
+
+  // --- Profile card ---
+  // Title chip inside the profile card uses the same currentTitle() pick.
   if (title) {
-    refs.titleChip.hidden = false;
-    setText(refs.titleValue, title.label);
+    refs.profileTitle.hidden = false;
+    setText(refs.profileTitle, title.label);
   } else {
-    refs.titleChip.hidden = true;
+    refs.profileTitle.hidden = true;
   }
+  // Marksman rank from lifetime pops. Update level + xp counters; only
+  // touch the fill width when the ratio actually changes (avoids fighting
+  // the rank-fill entry animation defined in notifications.css).
+  const pops = Storage.data.lifetimePops || 0;
+  const rank = computeRank(pops);
+  setText(refs.profileLvl,   String(rank.level));
+  setText(refs.profileXpCur, String(rank.cur));
+  setText(refs.profileXpMax, String(rank.max));
+  const widthPct = (rank.ratio * 100).toFixed(1) + '%';
+  if (refs.profileRankFill.style.width !== widthPct) {
+    refs.profileRankFill.style.width = widthPct;
+  }
+  // Stat values — compact-formatted so 12480 reads as "12k".
+  setText(refs.profileStatScore,  fmtCompact(computeHighScore()));
+  setText(refs.profileStatLevels, String(Storage.data.unlockedLevel || 0));
+  setText(refs.profileStatCombo,  '×' + (Storage.data.lifetimeMaxCombo || 0));
 
   // --- Sound icon ---
   setText(refs.soundBtn, AudioSys.muted ? '🔇' : '🔊');

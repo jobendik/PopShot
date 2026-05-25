@@ -1,7 +1,9 @@
 /* Style entry point. Real rules live in src/styles/*. Order matters:
-   tokens → base → screens → hud → effects (so cascade lands cleanly). */
+   tokens → base → screens → hud → effects → notifications (so cascade
+   lands cleanly; notifications layers extra rules on top of the HUD). */
 @import './styles/tokens.css';
 @import './styles/base.css';
 @import './styles/screens.css';
 @import './styles/hud.css';
 @import './styles/effects.css';
+@import './styles/notifications.css';

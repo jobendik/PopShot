@@ -1,0 +1,748 @@
+/* =====================================================================
+   Notifications & advanced HUD systems
+
+   Borrows the structural patterns from INSPIRATION/ricochet.html
+   (medals, toasts, score-bump, combo ring, vignette, chromatic
+   aberration, profile card) and renders them in Bubble Breaker's
+   bright family-arcade aesthetic — gold/coral/pink/cyan/mint accents,
+   Bowlby One + Inter typography, biome-aware tinting.
+
+   All layers are pointer-events: none so gameplay clicks pass through.
+   Animations use transform + opacity only so they composite on the GPU
+   without triggering layout.
+   ===================================================================== */
+
+/* =====================================================================
+   MEDAL CALLOUTS — slide-in panels on the right side. Used for title
+   unlocks, combo milestones, multi-pop chains, and level-clear medals.
+   Five tiers (bronze/silver/gold/plat/mythic) mapped to the brand
+   palette so each tier is visually distinct at a glance.
+   ===================================================================== */
+
+.medals-layer {
+  position: absolute;
+  top: clamp(72px, 11cqi, 110px);
+  right: clamp(10px, 2cqi, 24px);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(340px, 36%);
+  pointer-events: none;
+}
+
+.medal {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px 12px 12px;
+  background:
+    linear-gradient(90deg, rgba(10, 24, 50, 0.95), rgba(10, 24, 50, 0.72));
+  border: 1px solid var(--medal-color, var(--brand-yellow));
+  border-left-width: 3px;
+  border-radius: var(--radius-md);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  overflow: hidden;
+  box-shadow:
+    0 8px 32px -8px rgba(0, 0, 0, 0.6),
+    0 0 30px -10px var(--medal-color, var(--brand-yellow));
+  animation:
+    medal-in 0.5s var(--ease-out) forwards,
+    medal-out 0.5s var(--ease-in) 2.6s forwards;
+}
+.medal::before {
+  content: "";
+  position: absolute;
+  top: 0; right: 0;
+  width: 40%; height: 100%;
+  background: linear-gradient(90deg, transparent, var(--medal-color, var(--brand-yellow)));
+  opacity: 0.1;
+  pointer-events: none;
+}
+.medal::after {
+  /* Sweep highlight that travels across the panel once on entry. */
+  content: "";
+  position: absolute;
+  top: 0; left: -100%;
+  width: 50%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.25), transparent);
+  animation: medal-sweep 1.4s var(--ease-out) 0.35s;
+  pointer-events: none;
+}
+
+@keyframes medal-in {
+  from { transform: translateX(120%) scale(0.9); opacity: 0; }
+  to   { transform: translateX(0) scale(1); opacity: 1; }
+}
+@keyframes medal-out {
+  from { transform: translateX(0); opacity: 1; }
+  to   { transform: translateX(120%); opacity: 0; }
+}
+@keyframes medal-sweep {
+  to { left: 160%; }
+}
+
+.medal__icon {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: var(--medal-color, var(--brand-yellow));
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 700;
+  box-shadow:
+    0 4px 16px -4px var(--medal-color, var(--brand-yellow)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  position: relative;
+}
+.medal__icon::before {
+  /* Pulsing ring around the icon — gives the medal a "fresh-issued" feel. */
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 14px;
+  border: 1px solid var(--medal-color, var(--brand-yellow));
+  opacity: 0.45;
+  animation: medal-ring-pulse 1.4s var(--ease-out) infinite;
+}
+@keyframes medal-ring-pulse {
+  0%   { transform: scale(1);   opacity: 0.5; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+
+.medal__info {
+  flex: 1;
+  min-width: 0;
+}
+.medal__tier {
+  font-family: var(--font-ui);
+  font-weight: 800;
+  font-size: var(--fs-micro);
+  letter-spacing: 0.22em;
+  color: var(--medal-color, var(--brand-yellow));
+  text-transform: uppercase;
+  line-height: 1;
+  margin-bottom: 3px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.medal__tier::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, var(--medal-color, var(--brand-yellow)), transparent);
+  opacity: 0.4;
+}
+.medal__title {
+  font-family: var(--font-display);
+  font-size: clamp(1rem, 2cqi, 1.25rem);
+  font-weight: 400; /* Bowlby One is single-weight */
+  text-transform: uppercase;
+  color: var(--paper);
+  letter-spacing: 0.02em;
+  line-height: 1.05;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.7);
+}
+.medal__sub {
+  font-family: var(--font-ui);
+  font-size: var(--fs-small);
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.75);
+  text-transform: uppercase;
+  margin-top: 4px;
+}
+.medal__reward {
+  flex-shrink: 0;
+  font-family: var(--font-display);
+  font-size: clamp(0.85rem, 1.7cqi, 1.05rem);
+  color: var(--medal-color, var(--brand-yellow));
+  letter-spacing: 0.04em;
+}
+
+/* Tier color mapping — uses Bubble Breaker brand palette. */
+.medal--bronze { --medal-color: #c47238; }
+.medal--silver { --medal-color: #d1d6e0; }
+.medal--gold   { --medal-color: var(--brand-yellow); }
+.medal--plat   { --medal-color: var(--brand-cyan); }
+.medal--mythic { --medal-color: var(--brand-pink); }
+
+/* =====================================================================
+   TOAST NOTIFICATIONS — top-center pills. Used for daily ready, life
+   lost, wave clear, welcome back, new high score, etc.
+   ===================================================================== */
+
+.toasts-layer {
+  position: absolute;
+  top: clamp(56px, 9cqi, 80px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  pointer-events: none;
+  /* Keep above the wave/timer chip in the HUD center cluster. */
+  max-width: min(90%, 520px);
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px 10px 12px;
+  background: rgba(10, 24, 50, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius-pill);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.7);
+  animation:
+    toast-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards,
+    toast-out 0.4s var(--ease-in) 3.4s forwards;
+  white-space: nowrap;
+}
+@keyframes toast-in {
+  from { transform: translateY(-30px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+@keyframes toast-out {
+  from { transform: translateY(0); opacity: 1; }
+  to   { transform: translateY(-30px); opacity: 0; }
+}
+
+.toast__icon {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--toast-color, var(--brand-yellow));
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 13px;
+  font-weight: 700;
+  flex-shrink: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.toast__text {
+  font-family: var(--font-ui);
+  font-size: var(--fs-small);
+  font-weight: 500;
+  color: var(--paper);
+  letter-spacing: 0.02em;
+}
+.toast__text b {
+  color: var(--toast-color, var(--brand-yellow));
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-right: 6px;
+  font-size: var(--fs-body);
+}
+
+.toast--success { --toast-color: var(--brand-mint); }
+.toast--warn    { --toast-color: var(--brand-yellow); }
+.toast--info    { --toast-color: var(--brand-cyan); }
+.toast--danger  { --toast-color: var(--brand-pink); }
+
+/* =====================================================================
+   SCORE DELTA — a small "+250" that floats up next to the score on each
+   pop. Lives inside the HUD's score-wrap so it positions relative to
+   the score panel.
+   ===================================================================== */
+
+.hud__score-delta {
+  display: inline-block;
+  margin-left: 8px;
+  font-family: var(--font-display);
+  font-size: clamp(0.7rem, 1.4cqi, 0.9rem);
+  font-weight: 400;
+  color: var(--brand-mint);
+  letter-spacing: 0.06em;
+  text-shadow: 0 0 12px rgba(6, 214, 160, 0.55);
+  opacity: 0;
+  pointer-events: none;
+}
+.hud__score-delta.is-fired {
+  animation: score-delta-pulse 760ms var(--ease-out);
+}
+@keyframes score-delta-pulse {
+  0%   { opacity: 0; transform: translateY(2px); }
+  12%  { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-14px); }
+}
+
+/* Enhanced score-pop — additionally tints to gold on the upbeat to read
+   as "score went UP". Overrides the existing keyframe in hud.css. */
+.hud__score-value.is-pop {
+  animation: score-pop-rich 360ms var(--ease-out);
+}
+@keyframes score-pop-rich {
+  0%   { transform: scale(1);    color: var(--brand-yellow); }
+  35%  { transform: scale(1.18); color: #fff; text-shadow: 0 2px 0 var(--ink), 0 0 22px var(--brand-yellow); }
+  100% { transform: scale(1);    color: var(--brand-yellow); }
+}
+
+/* =====================================================================
+   COMBO RING METER — circular countdown around the combo chip. The
+   `fg` circle's stroke-dashoffset drains as the combo window closes,
+   so players see the "use it or lose it" pressure visually.
+   ===================================================================== */
+
+.hud__combo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px 8px 8px;
+  background: rgba(10, 24, 50, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: var(--radius-md);
+  backdrop-filter: blur(10px) saturate(160%);
+  -webkit-backdrop-filter: blur(10px) saturate(160%);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.25s var(--ease-out), transform 0.25s var(--ease-out);
+  pointer-events: none;
+}
+.hud__combo.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.hud__combo-ring {
+  width: 34px;
+  height: 34px;
+  position: relative;
+  flex-shrink: 0;
+}
+.hud__combo-ring svg {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.hud__combo-ring circle {
+  fill: none;
+  stroke-width: 3;
+}
+.hud__combo-ring-bg {
+  stroke: rgba(255, 255, 255, 0.12);
+}
+.hud__combo-ring-fg {
+  stroke: var(--brand-yellow);
+  stroke-dasharray: 100;
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 80ms linear;
+  filter: drop-shadow(0 0 4px var(--brand-yellow));
+}
+.hud__combo.is-mid .hud__combo-ring-fg { stroke: var(--brand-coral); filter: drop-shadow(0 0 6px var(--brand-coral)); }
+.hud__combo.is-hot .hud__combo-ring-fg { stroke: var(--brand-pink);  filter: drop-shadow(0 0 8px var(--brand-pink)); }
+
+.hud__combo-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  align-items: flex-start;
+}
+.hud__combo-label {
+  font-family: var(--font-ui);
+  font-weight: 800;
+  font-size: var(--fs-micro);
+  letter-spacing: 0.22em;
+  color: rgba(255, 255, 255, 0.55);
+  text-transform: uppercase;
+  line-height: 1;
+}
+.hud__combo-value {
+  font-family: var(--font-display);
+  font-size: clamp(1rem, 2cqi, 1.35rem);
+  font-weight: 400;
+  color: var(--brand-yellow);
+  letter-spacing: 0.02em;
+  line-height: 1;
+  text-shadow: 0 0 14px rgba(255, 214, 10, 0.55);
+}
+.hud__combo.is-mid .hud__combo-value { color: var(--brand-coral); text-shadow: 0 0 14px rgba(255, 127, 80, 0.6); }
+.hud__combo.is-hot .hud__combo-value { color: var(--brand-pink);  text-shadow: 0 0 14px rgba(255, 77, 109, 0.7); }
+
+/* =====================================================================
+   POWERUP CHIPS (revamped). The existing .hud__effect chips get
+   countdown bars + icons. Stacks at the bottom-left.
+   ===================================================================== */
+
+.hud__bottom {
+  position: absolute;
+  bottom: clamp(12px, 2cqi, 22px);
+  left: clamp(12px, 2cqi, 22px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.hud__effect {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px 8px 10px;
+  background: rgba(10, 24, 50, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius-md);
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  overflow: hidden;
+  min-width: 160px;
+  font-family: var(--font-ui);
+  font-weight: 800;
+  font-size: var(--fs-small);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--paper);
+  animation: powerup-chip-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+@keyframes powerup-chip-in {
+  from { transform: translateX(-30px); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+.hud__effect::before {
+  /* Countdown bar across the bottom edge — fills from the chip color. */
+  content: "";
+  position: absolute;
+  bottom: 0; left: 0;
+  height: 3px;
+  width: var(--effect-progress, 100%);
+  background: var(--effect-color, var(--brand-yellow));
+  box-shadow: 0 0 10px var(--effect-color, var(--brand-yellow));
+  transition: width 200ms linear;
+}
+
+/* Tinting per effect type. Border color matches the bar so the chip
+   reads as a coherent color identity. */
+.hud__effect--slow   { --effect-color: var(--brand-cyan);   border-color: rgba(155, 231, 255, 0.6); color: var(--brand-cyan); }
+.hud__effect--freeze { --effect-color: var(--brand-cyan);   border-color: rgba(155, 231, 255, 0.6); color: var(--brand-cyan); }
+.hud__effect--magnet { --effect-color: var(--brand-violet); border-color: rgba(158, 123, 255, 0.6); color: var(--brand-violet); }
+.hud__effect--boost  { --effect-color: var(--brand-mint);   border-color: rgba(6, 214, 160, 0.6);   color: var(--brand-mint); }
+.hud__effect--jammed { --effect-color: var(--brand-pink);   border-color: rgba(255, 77, 109, 0.6);  color: var(--brand-pink); }
+.hud__effect--boss   { --effect-color: var(--brand-pink);   border-color: rgba(255, 77, 109, 0.6);  color: var(--brand-pink); }
+
+/* =====================================================================
+   VIGNETTE — full-stage CSS overlay. Subtle radial darkening at the
+   corners so the play field feels framed and cinematic.
+   ===================================================================== */
+
+.vignette {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-hud);
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at center,
+    transparent 45%,
+    rgba(0, 0, 0, 0.18) 75%,
+    rgba(0, 0, 0, 0.5) 100%
+  );
+  /* Reduce vignette opacity slightly in reduced-motion mode for low-vision
+     accessibility — the darkening can reduce contrast on edge text. */
+}
+@media (prefers-reduced-motion: reduce) {
+  .vignette { opacity: 0.5; }
+}
+
+/* =====================================================================
+   CHROMATIC ABERRATION — full-stage CSS overlay layered over canvas.
+   Two color-shifted gradients in screen blend mode, fading out over
+   ~300ms. Triggered on player death and big crits only.
+   ===================================================================== */
+
+.chrom-ab {
+  position: absolute;
+  inset: 0;
+  z-index: calc(var(--z-effects) - 1);
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 48% 50%, rgba(255, 77, 109, 0.22) 0%, transparent 60%),
+    radial-gradient(ellipse at 52% 50%, rgba(155, 231, 255, 0.22) 0%, transparent 60%);
+  mix-blend-mode: screen;
+  opacity: 0;
+  animation: chrom-ab-flash 320ms var(--ease-out);
+}
+@keyframes chrom-ab-flash {
+  0%   { opacity: 0; transform: scale(1); }
+  20%  { opacity: 1; transform: scale(1.01); }
+  100% { opacity: 0; transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chrom-ab { animation: none; }
+}
+
+/* =====================================================================
+   PROFILE CARD (main menu) — surfaces lifetime stats + current title +
+   marksman tier so returning players see their progress at a glance.
+   No coins/gems (Bubble Breaker has no f2p economy); the equivalent
+   "currency" slots show real progression stats.
+   ===================================================================== */
+
+.menu__profile {
+  /* Stamp top-left of the menu, occupying the same spot the legacy
+     title-chip used (which we hide when the profile card is mounted). */
+  position: absolute;
+  top: clamp(8px, 1.6cqi, 18px);
+  left: clamp(8px, 1.6cqi, 18px);
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.01)),
+    rgba(10, 24, 50, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  overflow: hidden;
+  animation: profile-in 0.6s var(--ease-out) 0.15s backwards;
+  /* Cap width on wide screens so it stays a card, not a banner. */
+  max-width: 320px;
+  width: clamp(220px, 28cqi, 320px);
+}
+/* On narrow viewports collapse the card so it doesn't dominate the menu. */
+@media (max-width: 560px) {
+  .menu__profile { width: clamp(180px, 50cqi, 240px); padding: 12px 14px; gap: 10px; }
+  .menu__profile-stats { gap: 6px; }
+}
+.menu__profile::before {
+  content: "";
+  position: absolute;
+  top: 0; right: 0;
+  width: 60%; height: 100%;
+  background: radial-gradient(ellipse at top right, rgba(255, 214, 10, 0.1), transparent 60%);
+  pointer-events: none;
+}
+@keyframes profile-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.menu__profile-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  position: relative;
+}
+.menu__profile-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--brand-yellow) 0%, var(--brand-coral) 100%);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 400;
+  color: var(--ink);
+  box-shadow:
+    0 8px 24px -8px rgba(255, 214, 10, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  flex-shrink: 0;
+}
+.menu__profile-meta {
+  flex: 1;
+  min-width: 0;
+}
+.menu__profile-name {
+  font-family: var(--font-display);
+  font-size: clamp(1.1rem, 2.4cqi, 1.4rem);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  color: var(--paper);
+  text-transform: uppercase;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.menu__profile-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  background: rgba(255, 214, 10, 0.15);
+  border: 1px solid rgba(255, 214, 10, 0.4);
+  border-radius: 4px;
+  color: var(--brand-yellow);
+  font-family: var(--font-ui);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: var(--fs-micro);
+}
+.menu__profile-title::before { content: "★"; }
+
+.menu__profile-rank-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.menu__profile-rank-labels {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-ui);
+  font-weight: 800;
+  font-size: var(--fs-micro);
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.menu__profile-rank-labels b {
+  color: var(--paper);
+  font-weight: 800;
+}
+.menu__profile-rank-bar {
+  height: 7px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+}
+.menu__profile-rank-bar::before {
+  /* Tick marks every 20% for visual segmentation. */
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    transparent 0,
+    transparent calc(20% - 1px),
+    rgba(255, 255, 255, 0.05) calc(20% - 1px),
+    rgba(255, 255, 255, 0.05) 20%
+  );
+}
+.menu__profile-rank-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--brand-yellow), var(--brand-coral));
+  box-shadow: 0 0 14px rgba(255, 214, 10, 0.6);
+  border-radius: 2px;
+  position: relative;
+  animation: rank-fill 1.4s var(--ease-out) 0.6s forwards;
+}
+.menu__profile-rank-fill::after {
+  content: "";
+  position: absolute;
+  right: 0; top: 0;
+  height: 100%; width: 14px;
+  background: linear-gradient(90deg, transparent, white);
+  opacity: 0.35;
+}
+@keyframes rank-fill {
+  from { width: 0%; }
+  /* Width is set via inline style on the element; this keyframe just
+     handles the entry animation by overriding to the data-target. */
+}
+
+.menu__profile-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 2px;
+}
+.menu__profile-stat {
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-sm);
+}
+.menu__profile-stat-label {
+  font-family: var(--font-ui);
+  font-weight: 800;
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  margin-bottom: 3px;
+  line-height: 1;
+}
+.menu__profile-stat-value {
+  font-family: var(--font-display);
+  font-size: clamp(1rem, 2.2cqi, 1.4rem);
+  font-weight: 400;
+  color: var(--paper);
+  line-height: 1;
+}
+.menu__profile-stat-value small {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 0.55em;
+  color: rgba(255, 255, 255, 0.5);
+  margin-left: 2px;
+  letter-spacing: 0.08em;
+}
+
+/* =====================================================================
+   ENHANCED CENTER BANNER — used for WAVE intros, GO!, level-clear.
+   Layers a pretitle + bold display title + sub for hierarchy.
+   ===================================================================== */
+
+.fx-banner-rich {
+  position: absolute;
+  top: 38%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+  animation:
+    banner-rich-in 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards,
+    banner-rich-out 0.5s var(--ease-in) 1.9s forwards;
+}
+@keyframes banner-rich-in {
+  from { transform: translate(-50%, -50%) scale(0.6); opacity: 0; filter: blur(8px); }
+  to   { transform: translate(-50%, -50%) scale(1);   opacity: 1; filter: blur(0); }
+}
+@keyframes banner-rich-out {
+  from { transform: translate(-50%, -50%) scale(1);    opacity: 1; }
+  to   { transform: translate(-50%, -50%) scale(1.15); opacity: 0; }
+}
+
+.fx-banner-rich__pretitle {
+  font-family: var(--font-ui);
+  font-weight: 800;
+  font-size: clamp(0.7rem, 1.5cqi, 0.95rem);
+  letter-spacing: 0.4em;
+  color: var(--brand-yellow);
+  text-transform: uppercase;
+  text-shadow: 0 0 18px rgba(255, 214, 10, 0.55);
+}
+.fx-banner-rich__main {
+  font-family: var(--font-display);
+  font-size: clamp(3rem, 9cqi, 6rem);
+  font-weight: 400;
+  color: var(--paper);
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  line-height: 0.9;
+  text-shadow: 0 6px 30px rgba(0, 0, 0, 0.7), 0 0 40px rgba(255, 214, 10, 0.3);
+}
+.fx-banner-rich__main em {
+  font-style: normal;
+  color: var(--brand-yellow);
+}
+.fx-banner-rich__sub {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: clamp(0.75rem, 1.6cqi, 1rem);
+  letter-spacing: 0.3em;
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: uppercase;
+  margin-top: 6px;
+}
