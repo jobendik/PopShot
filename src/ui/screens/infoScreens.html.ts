@@ -17,13 +17,26 @@ import { activeMissions, getWeeklyEvent, nextUnlockHint, weeklyBestScore } from 
 import { emit } from '../../systems/analytics';
 import type { Game } from '../../game';
 
-interface Row { label: string; value: string; kbd?: boolean; }
+interface Row {
+  label: string;
+  value: string;
+  kbd?: boolean;
+  rich?: boolean;
+}
+
+function controllerChip(label: string, variant: string): string {
+  return `<span class="info__pad-chip info__pad-chip--${variant}">${label}</span>`;
+}
+
+function controllerValue(...chips: string[]): string {
+  return `<span class="info__controller">${chips.join('')}</span>`;
+}
 
 function rowHtml(rows: Row[]): string {
   return rows.map(r => `
     <div class="info__row">
       <span class="info__row-label">${r.label}</span>
-      <span class="${r.kbd ? 'info__kbd' : 'info__row-value'}">${r.value}</span>
+      <span class="${r.kbd ? 'info__kbd' : r.rich ? 'info__row-value info__row-value--rich' : 'info__row-value'}">${r.value}</span>
     </div>
   `).join('');
 }
@@ -72,6 +85,35 @@ export function buildControls(): HTMLElement {
     { label: 'Pause',         value: 'P or Esc',          kbd: true },
     { label: 'Restart',       value: 'R',                kbd: true },
     { label: 'Mute',          value: 'M',                kbd: true },
+    {
+      label: 'PS5 Move',
+      value: controllerValue(
+        controllerChip('LS', 'stick'),
+        controllerChip('+', 'dpad'),
+      ),
+      rich: true,
+    },
+    {
+      label: 'PS5 Fire',
+      value: controllerValue(controllerChip('X', 'cross')),
+      rich: true,
+    },
+    {
+      label: 'PS5 Pause/Back',
+      value: controllerValue(
+        controllerChip('O', 'circle'),
+        controllerChip('OPT', 'options'),
+      ),
+      rich: true,
+    },
+    {
+      label: 'PS5 Restart/Mute',
+      value: controllerValue(
+        controllerChip('[]', 'square'),
+        controllerChip('△', 'triangle'),
+      ),
+      rich: true,
+    },
     { label: 'P2 Move',       value: 'J / L',            kbd: true },
     { label: 'P2 Fire',       value: 'I or K or U',      kbd: true },
   ];

@@ -1,5 +1,5 @@
 import { AudioSys } from './audio';
-import { W, H } from '../constants';
+import { H, State, W, type GameState } from '../constants';
 
 // ============================ INPUT =================================
 export const keys: Record<string, boolean> = {};        // currently held
@@ -39,6 +39,44 @@ export const TOUCH_BUTTONS = {
 };
 
 let canvasEl: HTMLCanvasElement | null = null;
+
+const GAMEPAD_AXIS_DEADZONE = 0.35;
+const gamepadKeyState: Record<string, boolean> = {
+  ArrowLeft: false,
+  ArrowRight: false,
+  ArrowUp: false,
+  ArrowDown: false,
+  Space: false,
+  Escape: false,
+  KeyP: false,
+  KeyR: false,
+  KeyM: false,
+};
+
+function applySyntheticKey(code: string, held: boolean, sourceState: Record<string, boolean>) {
+  if (held) {
+    if (!keys[code]) keysPressed[code] = true;
+    keys[code] = true;
+    sourceState[code] = true;
+  } else if (sourceState[code]) {
+    keys[code] = false;
+    sourceState[code] = false;
+  }
+}
+
+function releaseSyntheticKeys(sourceState: Record<string, boolean>) {
+  for (const code in sourceState) applySyntheticKey(code, false, sourceState);
+}
+
+function getPrimaryGamepad(): Gamepad | null {
+  if (typeof navigator === 'undefined' || typeof navigator.getGamepads !== 'function') return null;
+  const pads = navigator.getGamepads();
+  for (let i = 0; i < pads.length; i++) {
+    const pad = pads[i];
+    if (pad?.connected) return pad;
+  }
+  return null;
+}
 
 // Active touches, keyed by Touch.identifier. Used to support multi-touch
 // (player holds a direction button AND fires at the same time).
@@ -267,6 +305,46 @@ export function flushHoverSound() {
 /** Called once per frame from game.update() while in PLAYING. */
 export function tickTouchInputs(enabled: boolean) {
   updateTouchKeys(enabled);
+}
+
+/** Poll the browser Gamepad API and synthesize the keyboard codes the rest of
+ *  the game already understands. This keeps controller support centralized in
+ *  one place instead of teaching every game state about buttons. */
+export function tickGamepadInputs(state: GameState) {
+  const pad = getPrimaryGamepad();
+  if (!pad) {
+    releaseSyntheticKeys(gamepadKeyState);
+    return;
+  }
+
+  const axisX = pad.axes[0] ?? 0;
+  const axisY = pad.axes[1] ?? 0;
+  const horizontalLeft = axisX <= -GAMEPAD_AXIS_DEADZONE || !!pad.buttons[14]?.pressed;
+  const horizontalRight = axisX >= GAMEPAD_AXIS_DEADZONE || !!pad.buttons[15]?.pressed;
+  const verticalEnabled = state !== State.PLAYING;
+  const verticalUp = verticalEnabled && (axisY <= -GAMEPAD_AXIS_DEADZONE || !!pad.buttons[12]?.pressed);
+  const verticalDown = verticalEnabled && (axisY >= GAMEPAD_AXIS_DEADZONE || !!pad.buttons[13]?.pressed);
+
+  applySyntheticKey('ArrowLeft', horizontalLeft && !horizontalRight, gamepadKeyState);
+  applySyntheticKey('ArrowRight', horizontalRight && !horizontalLeft, gamepadKeyState);
+  applySyntheticKey('ArrowUp', verticalUp && !verticalDown, gamepadKeyState);
+  applySyntheticKey('ArrowDown', verticalDown && !verticalUp, gamepadKeyState);
+
+  // Standard-mapped PS5/DualSense buttons in browsers:
+  // Cross = 0, Circle = 1, Square = 2, Triangle = 3, Options = 9.
+  applySyntheticKey('Space', !!pad.buttons[0]?.pressed, gamepadKeyState);
+  applySyntheticKey('Escape', !!pad.buttons[1]?.pressed, gamepadKeyState);
+  applySyntheticKey('KeyR', !!pad.buttons[2]?.pressed, gamepadKeyState);
+  applySyntheticKey('KeyM', !!pad.buttons[3]?.pressed, gamepadKeyState);
+  applySyntheticKey('KeyP', !!pad.buttons[9]?.pressed, gamepadKeyState);
+
+  if (
+    horizontalLeft || horizontalRight || verticalUp || verticalDown
+    || pad.buttons[0]?.pressed || pad.buttons[1]?.pressed || pad.buttons[2]?.pressed
+    || pad.buttons[3]?.pressed || pad.buttons[9]?.pressed
+  ) {
+    AudioSys.init();
+  }
 }
 
 /** Whether any touch is currently held over a given button id (for rendering). */

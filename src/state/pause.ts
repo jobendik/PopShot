@@ -114,7 +114,8 @@ export function renderPause(game: Game) {
     : ['A / ←  D / →   Move',
        'Space / W / ↑   Shoot',
        'P / Esc   Pause      R   Restart',
-       'M   Toggle Sound'];
+       'M   Toggle Sound',
+       'PS5: Left stick / D-pad move  •  Cross shoot'];
   for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], W/2, 286 + i * 22);
 
   // P2 hint — desktop only, and only once the player has some experience.

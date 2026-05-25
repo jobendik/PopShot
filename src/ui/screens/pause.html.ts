@@ -83,7 +83,8 @@ export function syncPause(game: Game, root: HTMLElement) {
          <div>Tap the pause icon (top-right) to pause / resume.</div>`
       : `<div><strong>A / ←</strong> · <strong>D / →</strong>  Move</div>
          <div><strong>Space / W / ↑</strong>  Shoot</div>
-         <div><strong>P</strong> or <strong>Esc</strong>  Pause     <strong>R</strong>  Restart     <strong>M</strong>  Mute</div>`;
+        <div><strong>P</strong> or <strong>Esc</strong>  Pause     <strong>R</strong>  Restart     <strong>M</strong>  Mute</div>
+        <div><strong>PS5</strong>  Left stick / D-pad move  •  Cross shoot  •  Circle / Options pause</div>`;
   }
 
   const reduced = root.querySelector<HTMLElement>('[data-role="reduced"]');
