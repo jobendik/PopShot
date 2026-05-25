@@ -32,6 +32,7 @@ import { buildGameOver, syncGameOver } from './screens/gameOver.html';
 import { buildLevelClear, syncLevelClear, buildBossDefeated, buildVictory, syncVictory } from './screens/levelClear.html';
 import { buildHUD, syncHUD } from './hud/hud.html';
 import { buildTouchControls } from './hud/touchControls.html';
+import { buildOnboardingOverlay, tickOnboardingOverlay } from './overlay/onboarding.html';
 import { initEffects } from './overlay/effects';
 import { AudioSys } from '../systems/audio';
 import type { Game } from '../game';
@@ -84,6 +85,7 @@ class UIRoot {
     this.hudRoot = buildHUD(game);
     container.appendChild(this.hudRoot);
     container.appendChild(buildTouchControls());
+    container.appendChild(buildOnboardingOverlay(game));
   }
 
   private register(
@@ -128,6 +130,11 @@ class UIRoot {
     // HUD syncs every frame regardless of active screen (it shows during
     // playing/paused/dead/level-clear/etc and self-hides otherwise).
     syncHUD(game);
+
+    // First-play touch onboarding — also runs every frame so it can open
+    // itself on the first PLAYING entry and auto-dismiss after a timeout
+    // or a horizontal-move input. No-op on desktop / after seen flag flips.
+    tickOnboardingOverlay(game);
   }
 }
 

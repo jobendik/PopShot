@@ -4,6 +4,7 @@ dist/
 vite-dev.log
 vite-dev.err
 .DS_Store
+.smoke/
 
 # Source audio libraries — extracted into public/sfx & public/music; the
 # archives/working copies themselves don't belong in the repo.

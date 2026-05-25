@@ -7,8 +7,7 @@ import { rand } from '../utils';
 import { AudioSys } from '../systems/audio';
 import { emit } from '../systems/analytics';
 import { resolveCollisions } from '../systems/collisions';
-import { renderHUD, renderTouchControls } from '../systems/hud';
-import { consumePauseTap, consumePressed, isTouchDevice, keysPressed, pointer, tickTouchInputs } from '../systems/input';
+import { consumePressed, isTouchDevice, keysPressed, pointer } from '../systems/input';
 import { Platform as Sdk } from '../systems/platform';
 import { Storage } from '../systems/storage';
 import { clamp } from '../utils';
@@ -18,11 +17,9 @@ import type { Game } from '../game';
 let onboardingHintEmitted = false;
 
 export function updatePlaying(game: Game, dt: number) {
-  // Touch input: translate active touches into synthetic key state.
-  tickTouchInputs(isTouchDevice);
-
-  // Pause — keyboard or canvas pause button.
-  if (consumePressed('KeyP') || consumePressed('Escape') || consumePauseTap()) {
+  // Pause — keyboard. The on-screen pause button (HTML HUD) has its own click
+  // handler that flips game.state directly.
+  if (consumePressed('KeyP') || consumePressed('Escape')) {
     game.state = State.PAUSED; AudioSys.menu(); return;
   }
   // Local co-op is a desktop-only feature (touch UI is single-player).
@@ -287,18 +284,14 @@ export function renderWorld(game: Game) {
   for (const sc of game.smokeClouds) sc.draw(ctx);
   for (const ft of game.floatingTexts) ft.draw(ctx);
 
-  // Touch controls (translucent, drawn before HUD so the score/timer overlay them).
-  if (game.state === State.PLAYING || game.state === State.PLAYER_DEAD) {
-    renderTouchControls(game);
-  }
-
-  renderHUD(game);
-
   // First-ever-session control hint — a calm pill above the player showing
   // the basic controls. Shown only until the player has popped their very
   // first ball ever (firstPopCelebrated is a sticky one-way flag in Storage).
   // Fades out smoothly after the first pop so it doesn't linger.
-  if (!Storage.data.firstPopCelebrated && game.state === State.PLAYING && game.mode === 'tour' && game.levelIndex === 0 && game.introTimer <= 0) {
+  // Suppressed on touch: the DOM onboarding overlay
+  // (src/ui/overlay/onboarding.html.ts) takes over there and explains the
+  // touch buttons specifically.
+  if (!isTouchDevice && !Storage.data.firstPopCelebrated && game.state === State.PLAYING && game.mode === 'tour' && game.levelIndex === 0 && game.introTimer <= 0) {
     const fadeFrom = 1.0;   // full opacity for the first second
     const hangSecs = 6.0;   // fully visible for this long
     const fadeSecs = 1.5;   // then fade out over this
@@ -322,11 +315,7 @@ export function renderWorld(game: Game) {
       ctx.fillText('HOW TO PLAY', W/2, y + 16);
       ctx.font = 'bold 16px sans-serif';
       ctx.fillStyle = '#ffd60a';
-      if (isTouchDevice) {
-        ctx.fillText('TAP ◀ ▶ TO MOVE   •   TAP FIRE TO POP', W/2, y + 40);
-      } else {
-        ctx.fillText('A / D or ← →  MOVE   •   SPACE / ↑  FIRE', W/2, y + 40);
-      }
+      ctx.fillText('A / D or ← →  MOVE   •   SPACE / ↑  FIRE', W/2, y + 40);
       const firstBall = game.balls.find(b => !b.dead);
       if (firstBall && game.player) {
         const pulse = 0.5 + Math.sin(age * 7) * 0.5;

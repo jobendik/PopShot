@@ -6,6 +6,7 @@ import { State } from '../../constants';
 import { AudioSys } from '../../systems/audio';
 import { isTouchDevice } from '../../systems/input';
 import { Storage } from '../../systems/storage';
+import { applyTouchControlSettings } from '../hud/touchControls.html';
 import type { Game } from '../../game';
 
 function restartCurrentRun(game: Game) {
@@ -26,7 +27,7 @@ export function buildPause(game: Game): HTMLElement {
     <h2 class="ui-heading ui-heading--display overlay-card__title">Paused</h2>
     <div class="overlay-card__sub" data-role="level-name"></div>
 
-    <div class="ui-card" style="padding: 14px;">
+    <div class="ui-card pause__controls-card" style="padding: 14px;">
       <div style="font-size: var(--fs-micro); letter-spacing: 0.16em; opacity: 0.6; text-transform: uppercase; margin-bottom: 8px;">Controls</div>
       <div data-role="controls" style="display:flex;flex-direction:column;gap:6px;font-size:var(--fs-small);"></div>
     </div>
@@ -38,6 +39,27 @@ export function buildPause(game: Game): HTMLElement {
     <div class="pause__toggle" data-role="mute">
       <span>Sound</span>
       <div class="pause__toggle-switch"></div>
+    </div>
+
+    <div class="pause__mobile-settings" data-role="mobile-settings" hidden>
+      <div class="pause__section-label">Mobile controls</div>
+      <div class="pause__toggle" data-role="autofire">
+        <span>Auto-fire</span>
+        <div class="pause__toggle-switch"></div>
+      </div>
+      <div class="pause__toggle" data-role="lefty">
+        <span>Left-handed layout</span>
+        <div class="pause__toggle-switch"></div>
+      </div>
+      <div class="pause__toggle" data-role="haptics">
+        <span>Vibration</span>
+        <div class="pause__toggle-switch"></div>
+      </div>
+      <div class="pause__slider-row">
+        <label class="pause__slider-label">Button size</label>
+        <input class="pause__slider" type="range" min="80" max="125" step="5" data-role="scale-slider" aria-label="Button size" />
+        <span class="pause__slider-value" data-role="scale-value">100%</span>
+      </div>
     </div>
 
     <div class="overlay-card__actions">
@@ -68,6 +90,39 @@ export function buildPause(game: Game): HTMLElement {
     AudioSys.menu();
   });
 
+  // Mobile-only settings cluster. Hidden on desktop entirely (and the
+  // sync function below also keeps it hidden if the user is on a non-touch
+  // device, so this doesn't leak into hybrid laptops via a stale build).
+  const mobileSettings = card.querySelector<HTMLElement>('[data-role="mobile-settings"]');
+  if (isTouchDevice && mobileSettings) {
+    mobileSettings.hidden = false;
+    card.querySelector<HTMLElement>('[data-role="autofire"]')!.addEventListener('click', () => {
+      AudioSys.menu();
+      Storage.data.mobileAutoFire = !Storage.data.mobileAutoFire;
+      Storage.save();
+    });
+    card.querySelector<HTMLElement>('[data-role="lefty"]')!.addEventListener('click', () => {
+      AudioSys.menu();
+      Storage.data.mobileLefty = !Storage.data.mobileLefty;
+      Storage.save();
+      applyTouchControlSettings();
+    });
+    card.querySelector<HTMLElement>('[data-role="haptics"]')!.addEventListener('click', () => {
+      AudioSys.menu();
+      Storage.data.mobileHaptics = !Storage.data.mobileHaptics;
+      Storage.save();
+    });
+    const scaleSlider = card.querySelector<HTMLInputElement>('[data-role="scale-slider"]');
+    if (scaleSlider) {
+      scaleSlider.addEventListener('input', () => {
+        const pct = parseInt(scaleSlider.value, 10);
+        Storage.data.mobileTouchScale = pct / 100;
+        Storage.save();
+        applyTouchControlSettings();
+      });
+    }
+  }
+
   return root;
 }
 
@@ -91,4 +146,18 @@ export function syncPause(game: Game, root: HTMLElement) {
   if (reduced) reduced.classList.toggle('is-on', !!Storage.data.reducedMotion);
   const mute = root.querySelector<HTMLElement>('[data-role="mute"]');
   if (mute) mute.classList.toggle('is-on', !AudioSys.muted);
+
+  if (isTouchDevice) {
+    const af = root.querySelector<HTMLElement>('[data-role="autofire"]');
+    if (af) af.classList.toggle('is-on', !!Storage.data.mobileAutoFire);
+    const lf = root.querySelector<HTMLElement>('[data-role="lefty"]');
+    if (lf) lf.classList.toggle('is-on', !!Storage.data.mobileLefty);
+    const hp = root.querySelector<HTMLElement>('[data-role="haptics"]');
+    if (hp) hp.classList.toggle('is-on', !!Storage.data.mobileHaptics);
+    const slider = root.querySelector<HTMLInputElement>('[data-role="scale-slider"]');
+    const sval = root.querySelector<HTMLElement>('[data-role="scale-value"]');
+    const pct = Math.round((Storage.data.mobileTouchScale || 1) * 100);
+    if (slider && slider.value !== String(pct)) slider.value = String(pct);
+    if (sval && sval.textContent !== pct + '%') sval.textContent = pct + '%';
+  }
 }

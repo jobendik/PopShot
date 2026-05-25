@@ -342,14 +342,27 @@
   text-transform: uppercase;
 }
 
-/* ---- Touch controls — DOM buttons that replace the canvas-drawn ones.
-   Only visible on touch devices and during gameplay states. ---- */
+/* ---- Touch controls — DOM buttons.
+   Layout: two flex pads anchored to the bottom corners of the stage.
+   - .touch-controls__pad--move: left side, holds Left+Right buttons
+   - .touch-controls__pad--fire: right side, holds Fire
+   `body.is-lefty` reverses the side assignment.
+   Sizes scale via the `--touch-scale` custom property (set on body by
+   the settings system). Safe-area insets push the buttons away from
+   notches and the home-bar gesture zone on iOS. ---- */
 .touch-controls {
   position: absolute;
   inset: 0;
   pointer-events: none;
   z-index: var(--z-hud);
   display: none;
+  --touch-btn-base: 78px;
+  --touch-btn-size: calc(var(--touch-btn-base) * var(--touch-scale, 1));
+  --touch-fire-base: 102px;
+  --touch-fire-size: calc(var(--touch-fire-base) * var(--touch-scale, 1));
+  --touch-gap: clamp(10px, 2cqi, 18px);
+  --touch-edge-x: clamp(12px, 3cqi, 28px);
+  --touch-edge-y: clamp(10px, 2.4cqh, 22px);
 }
 @media (hover: none) and (pointer: coarse) {
   body[data-state="playing"] .touch-controls,
@@ -357,34 +370,284 @@
   body[data-state="player_dead"] .touch-controls {
     display: block;
   }
+  /* Dim + drop interactivity during pause so the buttons don't compete with
+     the pause card visually. They stay rendered so they don't pop-in on
+     resume, but no taps reach them. */
+  body[data-state="paused"] .touch-controls {
+    opacity: 0.25;
+    transition: opacity var(--dur-base) var(--ease-out);
+  }
+  body[data-state="paused"] .touch-btn { pointer-events: none; }
 }
+
+.touch-controls__pad {
+  position: absolute;
+  bottom: calc(var(--touch-edge-y) + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  align-items: flex-end;
+  gap: var(--touch-gap);
+}
+.touch-controls__pad--move {
+  left: calc(var(--touch-edge-x) + env(safe-area-inset-left, 0px));
+}
+.touch-controls__pad--fire {
+  right: calc(var(--touch-edge-x) + env(safe-area-inset-right, 0px));
+}
+/* Lefty mode: swap the two pads. We keep the source markup unchanged and
+   flip via CSS so the JS doesn't have to know about handedness. */
+body.is-lefty .touch-controls__pad--move {
+  left: auto;
+  right: calc(var(--touch-edge-x) + env(safe-area-inset-right, 0px));
+}
+body.is-lefty .touch-controls__pad--fire {
+  right: auto;
+  left: calc(var(--touch-edge-x) + env(safe-area-inset-left, 0px));
+}
+
 .touch-btn {
   pointer-events: auto;
-  position: absolute;
-  background: rgba(10, 24, 50, 0.4);
-  border: 2px solid rgba(255, 255, 255, 0.45);
-  border-radius: 22px;
-  color: #fff;
+  /* The button is its own positioning context for the icon + label. */
+  position: relative;
+  width: var(--touch-btn-size);
+  height: var(--touch-btn-size);
+  /* The painted shape is a circle; tap-area is the full bounding box (we
+     don't clip events). This gives a generous hit-target without making the
+     visual feel oversized. */
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0) 55%),
+    linear-gradient(180deg, rgba(10, 24, 50, 0.55), rgba(10, 24, 50, 0.72));
+  border: 2px solid color-mix(in srgb, var(--brand-cyan) 55%, transparent);
+  color: var(--paper);
   display: grid;
   place-items: center;
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
+  /* No scrolling/zooming from gestures on the button. */
+  touch-action: none;
   font-family: var(--font-display);
-  font-size: 14px;
-  letter-spacing: 0.1em;
-  transition: background-color 80ms, border-color 80ms, transform 80ms;
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  font-size: clamp(11px, 1.4cqi, 13px);
+  letter-spacing: 0.16em;
+  transition:
+    transform 90ms var(--ease-out),
+    background-color 100ms,
+    border-color 100ms,
+    box-shadow 120ms var(--ease-out),
+    color 100ms;
+  backdrop-filter: blur(6px) saturate(140%);
+  -webkit-backdrop-filter: blur(6px) saturate(140%);
+  box-shadow:
+    0 8px 18px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.45);
+  /* Honor the global reduced-motion token so transitions don't fight it. */
+  --press-scale: 0.93;
+}
+.touch-btn:focus-visible {
+  outline: 3px solid var(--brand-cyan);
+  outline-offset: 3px;
 }
 .touch-btn.is-held {
-  background: var(--brand-yellow);
-  color: var(--ink);
+  background:
+    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0) 55%),
+    linear-gradient(180deg, color-mix(in srgb, var(--brand-yellow) 90%, white), var(--brand-yellow));
   border-color: var(--ink);
-  transform: scale(0.96);
+  color: var(--ink);
+  transform: scale(var(--press-scale));
+  box-shadow:
+    0 4px 0 var(--ink),
+    0 0 26px rgba(255, 214, 10, 0.65),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.35);
 }
-.touch-btn svg { width: 38px; height: 38px; }
-.touch-btn--left  { left: 2cqi; bottom: 2cqi; width: 16cqi; min-width: 76px; height: 14cqh; min-height: 70px; }
-.touch-btn--right { left: 19cqi; bottom: 2cqi; width: 16cqi; min-width: 76px; height: 14cqh; min-height: 70px; }
-.touch-btn--fire  { right: 2cqi; bottom: 2cqi; width: 22cqi; min-width: 100px; height: 14cqh; min-height: 70px; flex-direction: column; }
+
+.touch-btn__icon {
+  width: 52%;
+  height: 52%;
+  filter: drop-shadow(0 2px 0 rgba(0, 0, 0, 0.45));
+  transition: filter 100ms, transform 100ms;
+}
+.touch-btn.is-held .touch-btn__icon {
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.45));
+  transform: translateY(1px);
+}
+.touch-btn__label {
+  position: absolute;
+  bottom: 9%;
+  left: 0; right: 0;
+  text-align: center;
+  font-size: clamp(10px, 1.3cqi, 12px);
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  pointer-events: none;
+  opacity: 0.85;
+}
+.touch-btn--fire {
+  width: var(--touch-fire-size);
+  height: var(--touch-fire-size);
+  /* Fire gets a coral/yellow rim so it's visually distinct from the two
+     movement buttons at a glance — important for thumb muscle-memory. */
+  border-color: color-mix(in srgb, var(--brand-coral) 70%, transparent);
+  background:
+    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.20), rgba(255, 255, 255, 0) 55%),
+    linear-gradient(180deg, rgba(40, 14, 8, 0.55), rgba(10, 24, 50, 0.72));
+  color: var(--brand-yellow);
+}
+.touch-btn--fire .touch-btn__icon { width: 46%; height: 46%; }
+.touch-btn--fire.is-held {
+  background:
+    radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0) 55%),
+    linear-gradient(180deg, color-mix(in srgb, var(--brand-coral) 92%, white), var(--brand-coral));
+  border-color: var(--ink);
+  color: var(--ink);
+  box-shadow:
+    0 4px 0 var(--ink),
+    0 0 28px rgba(255, 127, 80, 0.7),
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.35);
+}
+
+/* On very wide stages (tablets in landscape), keep the buttons comfortable
+   without making them so big they cover the player. Cap the fire button. */
+@media (min-aspect-ratio: 16/9) and (pointer: coarse) {
+  .touch-controls { --touch-btn-base: 84px; --touch-fire-base: 110px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .touch-btn { transition: none; }
+  .touch-btn.is-held { transform: none; }
+}
+
+/* ---- First-play touch onboarding overlay ----
+   Translucent dim + three labelled chips that point at LEFT / RIGHT / FIRE.
+   Only renders on touch + during PLAYING + only when .is-open is set
+   from JS. CSS @media gate is belt-and-suspenders. */
+.mobile-onboarding {
+  position: absolute;
+  inset: 0;
+  z-index: calc(var(--z-hud) + 1);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity var(--dur-base) var(--ease-out),
+    visibility 0s linear var(--dur-base);
+  font-family: var(--font-display);
+  color: var(--paper);
+  --chip-bottom-offset: clamp(118px, 20cqh, 180px);
+  --chip-edge-x: clamp(20px, 5cqi, 60px);
+}
+@media not all and (hover: none) and (pointer: coarse) {
+  .mobile-onboarding { display: none; }
+}
+.mobile-onboarding.is-open {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0s;
+  pointer-events: auto;
+}
+
+.mobile-onboarding__dim {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 20% 95%, rgba(0, 0, 0, 0.65), transparent 35%),
+    radial-gradient(ellipse at 80% 95%, rgba(0, 0, 0, 0.65), transparent 35%),
+    rgba(0, 0, 0, 0.35);
+}
+
+.mobile-onboarding__marker {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.55));
+  animation: onboard-bounce 1.4s var(--ease-out) infinite;
+}
+/* MOVE marker hovers above the L+R pair, anchored to the movement pad. The
+   chip spans the visual width of both buttons so it never collides with the
+   FIRE marker even on narrow viewports. */
+.mobile-onboarding__marker--move {
+  left: calc(var(--chip-edge-x) + env(safe-area-inset-left, 0px));
+  bottom: var(--chip-bottom-offset);
+  color: var(--brand-cyan);
+}
+.mobile-onboarding__marker--fire {
+  right: calc(var(--chip-edge-x) + env(safe-area-inset-right, 0px));
+  bottom: var(--chip-bottom-offset);
+  color: var(--brand-coral);
+  animation-delay: 200ms;
+}
+
+/* Lefty swap: keep markers above the buttons after the lefty swap. */
+body.is-lefty .mobile-onboarding__marker--move {
+  left: auto;
+  right: calc(var(--chip-edge-x) + env(safe-area-inset-right, 0px));
+}
+body.is-lefty .mobile-onboarding__marker--fire {
+  right: auto;
+  left: calc(var(--chip-edge-x) + env(safe-area-inset-left, 0px));
+}
+
+.mobile-onboarding__chip {
+  background: var(--ink);
+  color: var(--paper);
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  border: 2px solid currentColor;
+  font-size: clamp(11px, 1.5cqi, 13px);
+  letter-spacing: 0.18em;
+  font-weight: 800;
+  text-transform: uppercase;
+  white-space: nowrap;
+  box-shadow: 0 0 16px color-mix(in srgb, currentColor 60%, transparent);
+}
+.mobile-onboarding__chip--fire { color: var(--brand-coral); }
+.mobile-onboarding__arrow {
+  width: 32px;
+  height: 32px;
+  color: currentColor;
+}
+
+/* Main hint + autofire subline are stacked tight at the top of the dimmer so
+   they never overlap the chips (which live near the bottom above the
+   buttons). Keeping them grouped reads as one coherent message. */
+.mobile-onboarding__hint {
+  position: absolute;
+  left: 50%;
+  top: clamp(12%, 14cqh, 20%);
+  transform: translateX(-50%);
+  font-family: var(--font-display);
+  font-size: clamp(1.05rem, 2.6cqi, 1.6rem);
+  letter-spacing: 0.06em;
+  text-shadow: 0 3px 0 var(--ink), 0 6px 18px rgba(0, 0, 0, 0.6);
+  text-align: center;
+  max-width: 80cqi;
+  line-height: 1.2;
+}
+.mobile-onboarding__autofire {
+  position: absolute;
+  left: 50%;
+  top: calc(clamp(12%, 14cqh, 20%) + clamp(38px, 5cqh, 60px));
+  transform: translateX(-50%);
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: var(--fs-small);
+  letter-spacing: 0.06em;
+  color: var(--brand-yellow);
+  text-align: center;
+  max-width: 70cqi;
+  opacity: 0.95;
+  text-shadow: 0 2px 0 var(--ink);
+}
+
+@keyframes onboard-bounce {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(6px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mobile-onboarding__marker { animation: none; }
+}

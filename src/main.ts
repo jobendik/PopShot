@@ -124,3 +124,10 @@ if (typeof document !== 'undefined') {
 }
 
 game.start();
+
+// Dev-only test instrumentation. Tree-shaken from production builds. Lets the
+// smoke-test harness in .smoke/ read game state (timers, lives) without
+// inventing a public API.
+if (import.meta.env && import.meta.env.DEV) {
+  (window as unknown as { __game?: typeof game }).__game = game;
+}

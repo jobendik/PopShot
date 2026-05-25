@@ -14,7 +14,7 @@ import { Projectile } from './entities/projectile';
 import { emit } from './systems/analytics';
 import { AudioSys } from './systems/audio';
 import { clearLevel, explodeProjectile, killPlayer, popBall } from './systems/combat';
-import { consumePressed, flushHoverSound, keysPressed, pointer, tickGamepadInputs } from './systems/input';
+import { consumePressed, flushHoverSound, keysPressed, pointer, tickAutoFire, tickGamepadInputs } from './systems/input';
 import { Storage } from './systems/storage';
 import { pickDailyChallenge, type DailyPick } from './systems/daily';
 import { advanceMissions, getWeeklyEvent, recordWeeklyPanic } from './systems/retention';
@@ -583,6 +583,10 @@ export class Game {
 
   update(dt: number) {
     tickGamepadInputs(this.state);
+    // Mobile auto-fire driver. No-op on desktop / when disabled / when not in
+    // active gameplay. Runs every frame so state transitions release Space
+    // promptly without each state handler having to know about auto-fire.
+    tickAutoFire(this);
 
     // Mute toggle works in every state.
     if (consumePressed('KeyM')) AudioSys.toggle();

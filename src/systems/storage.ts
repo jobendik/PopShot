@@ -49,6 +49,20 @@ export interface SaveData {
   weeklyPanicBest: Record<string, number>;
   /** Week id whose weekly reward has already been granted. */
   weeklyRewardClaimed: string;
+  /** Mobile-only: auto-fire while playing so the player doesn't have to hold the
+   *  Fire button. Default on (mobile thumb fatigue is the #1 Pang-on-phone gripe).
+   *  Desktop ignores this entirely. */
+  mobileAutoFire: boolean;
+  /** Mobile-only: swap movement buttons to the right side and fire to the left
+   *  for left-handed players. Body[data-lefty] drives CSS. */
+  mobileLefty: boolean;
+  /** Mobile-only: 0.85–1.25 scale multiplier on touch controls so small-handed
+   *  players can shrink them and tablet players can grow them. */
+  mobileTouchScale: number;
+  /** Mobile-only: navigator.vibrate() on press / pop / damage. */
+  mobileHaptics: boolean;
+  /** Mobile-only: one-time-seen flag for the first-play touch overlay. */
+  mobileOnboardingSeen: boolean;
 }
 
 const KEY_V1 = 'bba_save_v1';
@@ -87,6 +101,11 @@ function createDefaultSave(): SaveData {
     missionStars: 0,
     weeklyPanicBest: {},
     weeklyRewardClaimed: '',
+    mobileAutoFire: true,
+    mobileLefty: false,
+    mobileTouchScale: 1,
+    mobileHaptics: true,
+    mobileOnboardingSeen: false,
   };
 }
 
@@ -245,6 +264,13 @@ export const Storage: {
         if (typeof this.data.missionDay !== 'string') this.data.missionDay = '';
         if (typeof this.data.missionStars !== 'number') this.data.missionStars = 0;
         if (typeof this.data.weeklyRewardClaimed !== 'string') this.data.weeklyRewardClaimed = '';
+        // Mobile control settings — backfill for pre-existing saves so the
+        // mobile UX is sensible on first load after this update.
+        if (typeof this.data.mobileAutoFire !== 'boolean') this.data.mobileAutoFire = true;
+        if (typeof this.data.mobileLefty !== 'boolean') this.data.mobileLefty = false;
+        if (typeof this.data.mobileTouchScale !== 'number' || !isFinite(this.data.mobileTouchScale)) this.data.mobileTouchScale = 1;
+        if (typeof this.data.mobileHaptics !== 'boolean') this.data.mobileHaptics = true;
+        if (typeof this.data.mobileOnboardingSeen !== 'boolean') this.data.mobileOnboardingSeen = false;
         return this.data;
       }
       const rawV1 = localStorage.getItem(KEY_V1);

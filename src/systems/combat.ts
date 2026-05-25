@@ -15,6 +15,7 @@ import { markTitlesSeen, newlyEarnedTitles, recordTrick } from './titles';
 import { advanceMissions } from './retention';
 import { FX } from '../ui/overlay/effects';
 import { pulseScoreDelta } from '../ui/hud/hud.html';
+import { Haptics } from './haptics';
 import type { Game } from '../game';
 
 /**
@@ -24,6 +25,7 @@ import type { Game } from '../game';
  */
 export function popBall(game: Game, ball: Ball, source: any) {
   if (ball.dead) return;
+  Haptics.pop();
   const baseScore = BALL_SCORE[ball.size];
   const boost = game.comboBoostTime > 0 ? 0.5 : 0;
   const comboMult = 1 + boost + Math.min(game.combo, 20) * 0.05;
@@ -351,6 +353,7 @@ export function killPlayer(game: Game, player: Player, reason: DeathReason = 'un
     player.shield = false;
     player.invuln = 1.0;
     AudioSys.shieldBreak();
+    Haptics.damage();
     game.flash = 0.15;
     game.shake = 6;
     for (let i = 0; i < 20; i++) {
@@ -362,6 +365,7 @@ export function killPlayer(game: Game, player: Player, reason: DeathReason = 'un
   player.dead = true;
   game.lastDeathReason = reason;
   AudioSys.hurt();
+  Haptics.death();
   game.shake = 18; game.flash = 0.3;
   for (let i = 0; i < 30; i++) {
     const a = Math.random() * Math.PI * 2, s = rand(80, 220);
