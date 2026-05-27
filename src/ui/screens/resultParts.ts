@@ -41,18 +41,50 @@ export function missionsBlock(): string {
     </div>`;
 }
 
-/** Weekly Panic event row — only meaningful when the player has touched panic. */
+/** Weekly event row — adapts display to the current week's mode (panic / score_attack / combo). */
 export function weeklyBlock(): string {
   const ev = getWeeklyEvent();
   const best = weeklyBestScore();
+  const label = `Weekly · ${ev.label}`;
+
+  if (ev.mode === 'combo') {
+    if (best <= 0) {
+      return `
+        <div class="result-section">
+          <div class="result-section__label">${label}</div>
+          <div class="result-mission">
+            <div class="result-mission__head">
+              <span class="result-mission__label">${ev.goalLabel}</span>
+              <span class="result-mission__count">Play any mode</span>
+            </div>
+          </div>
+        </div>`;
+    }
+    const pct = Math.min(100, Math.round((best / ev.comboGoal) * 100));
+    return `
+      <div class="result-section">
+        <div class="result-section__label">${label}</div>
+        <div class="result-mission ${best >= ev.comboGoal ? 'is-complete' : ''}">
+          <div class="result-mission__head">
+            <span class="result-mission__label">Best Combo This Week</span>
+            <span class="result-mission__count">×${best} / ×${ev.comboGoal}</span>
+          </div>
+          <div class="result-mission__bar"><span style="width:${pct}%"></span></div>
+        </div>
+      </div>`;
+  }
+
+  // panic or score_attack
+  const modeHint = ev.mode === 'panic' ? 'Try Panic Mode' : 'Try Score Attack';
+  const bestLabel = ev.mode === 'panic' ? 'Best Panic Score' : 'Best Score Attack';
   if (best <= 0) {
     return `
       <div class="result-section">
-        <div class="result-section__label">Weekly · ${ev.label}</div>
+        <div class="result-section__label">${label}</div>
         <div class="result-mission">
           <div class="result-mission__head">
             <span class="result-mission__label">${ev.goalLabel}</span>
-            <span class="result-mission__count">Try Panic Mode</span>
+            <span class="result-mission__count">${modeHint}</span>
           </div>
         </div>
       </div>`;
@@ -60,10 +92,10 @@ export function weeklyBlock(): string {
   const pct = Math.min(100, Math.round((best / ev.scoreGoal) * 100));
   return `
     <div class="result-section">
-      <div class="result-section__label">Weekly · ${ev.label}</div>
+      <div class="result-section__label">${label}</div>
       <div class="result-mission ${best >= ev.scoreGoal ? 'is-complete' : ''}">
         <div class="result-mission__head">
-          <span class="result-mission__label">Best Panic Score</span>
+          <span class="result-mission__label">${bestLabel}</span>
           <span class="result-mission__count">${best.toLocaleString()} / ${ev.scoreGoal.toLocaleString()}</span>
         </div>
         <div class="result-mission__bar"><span style="width:${pct}%"></span></div>
@@ -153,18 +185,29 @@ export function nextBestAction(game: Game): { text: string; sub?: string } {
     }
   }
 
-  // 3) Panic: chase weekly goal, or beat personal best wave.
+  // 3) Score Attack: chase weekly goal if it's a score_attack week.
+  if (game.mode === 'score_attack') {
+    const ev = getWeeklyEvent();
+    if (ev.mode === 'score_attack') {
+      const best = weeklyBestScore();
+      if (best < ev.scoreGoal) {
+        return { text: 'One more Score Attack could beat the weekly goal', sub: (ev.scoreGoal - best).toLocaleString() + ' to reach ' + ev.label };
+      }
+    }
+  }
+
+  // 4) Panic: chase weekly goal, or beat personal best wave.
   if (game.mode === 'panic') {
     const ev = getWeeklyEvent();
     const best = weeklyBestScore();
-    if (best < ev.scoreGoal) {
+    if (ev.mode === 'panic' && best < ev.scoreGoal) {
       return { text: 'One more Panic could beat the weekly goal', sub: (ev.scoreGoal - best).toLocaleString() + ' to reach ' + ev.label };
     }
     const bestWave = Storage.data.bestPanicWave || 0;
     return { text: 'Push past Wave ' + (bestWave + 1) + ' next run' };
   }
 
-  // 4) Fallback to the existing nextUnlockHint (palette / title progress).
+  // 5) Fallback to the existing nextUnlockHint (palette / title progress).
   return { text: nextUnlockHint() };
 }
 

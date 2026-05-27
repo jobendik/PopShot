@@ -11,7 +11,7 @@ import { isTouchDevice } from '../../systems/input';
 import { AudioSys } from '../../systems/audio';
 import {
   TITLES, TRICK_CONTRACTS, PLAYER_PALETTES,
-  earnedTitles, equipTitle, equipPalette,
+  earnedTitles, equipTitle, equipPalette, titleUnlockText,
 } from '../../systems/titles';
 import { activeMissions, getWeeklyEvent, nextUnlockHint, weeklyBestScore } from '../../systems/retention';
 import { themeMastery } from '../../systems/mastery';
@@ -170,9 +170,13 @@ export function syncHighScores(game: Game, root: HTMLElement) {
   void game;
   const tour = Storage.data.bestTour || {};
   const weekly = getWeeklyEvent();
+  const best = weeklyBestScore();
+  const weeklyValue = weekly.mode === 'combo'
+    ? (best > 0 ? '×' + best : '—')
+    : (best > 0 ? best.toLocaleString() : '—');
   const rows: Row[] = [
     { label: 'CrazyGames Leaderboard', value: Storage.data.leaderboardPanicSubmitted > 0 ? 'Panic ' + Storage.data.leaderboardPanicSubmitted.toLocaleString() : 'Panic Mode ready' },
-    { label: 'Weekly ' + weekly.label, value: weeklyBestScore().toLocaleString() },
+    { label: 'Weekly · ' + weekly.label, value: weeklyValue },
     { label: 'Best Panic Score', value: (Storage.data.bestPanicScore || 0).toLocaleString() },
     { label: 'Best Panic Wave', value: String(Storage.data.bestPanicWave || 0) },
     ...LEVELS.map((L, i) => ({
@@ -191,11 +195,11 @@ export function buildProfile(game: Game): HTMLElement {
     <h2 class="ui-heading ui-heading--display info__title">Profile</h2>
     <div class="profile-section profile-summary" data-role="summary"></div>
     <div class="profile-section">
-      <div class="profile-section__title">Equipped Title</div>
+      <div class="profile-section__title" data-role="titles-heading">Titles</div>
       <div class="profile-grid" data-role="titles"></div>
     </div>
     <div class="profile-section">
-      <div class="profile-section__title">Adventurer Palette</div>
+      <div class="profile-section__title" data-role="palettes-heading">Palettes</div>
       <div class="profile-grid profile-grid--palettes" data-role="palettes"></div>
     </div>
     <div class="profile-section">
@@ -268,6 +272,9 @@ export function syncProfile(_game: Game, root: HTMLElement) {
   `;
 
   const titles = root.querySelector<HTMLElement>('[data-role="titles"]')!;
+  const titlesHeading = root.querySelector<HTMLElement>('[data-role="titles-heading"]')!;
+  const earnedCount = earned.size;
+  titlesHeading.textContent = `Titles (${earnedCount} / ${TITLES.length})`;
   const equipped = d.equippedTitleId || '';
   const titleButtons = [
     `<button type="button" class="profile-choice ${equipped ? '' : 'is-equipped'}" data-title-id="">
@@ -277,13 +284,16 @@ export function syncProfile(_game: Game, root: HTMLElement) {
       const ok = earned.has(t.id);
       const active = equipped === t.id && ok;
       return `<button type="button" class="profile-choice ${active ? 'is-equipped' : ''}" data-title-id="${t.id}" ${ok ? '' : 'disabled'}>
-        <span>${t.label}</span><small>${ok ? (active ? 'Equipped' : 'Unlocked') : 'Locked'}</small>
+        <span>${t.label}</span><small>${ok ? (active ? 'Equipped' : 'Unlocked') : titleUnlockText(t.id)}</small>
       </button>`;
     }),
   ];
   titles.innerHTML = titleButtons.join('');
 
   const palettes = root.querySelector<HTMLElement>('[data-role="palettes"]')!;
+  const palettesHeading = root.querySelector<HTMLElement>('[data-role="palettes-heading"]')!;
+  const unlockedPalettes = PLAYER_PALETTES.filter(p => p.unlocked()).length;
+  palettesHeading.textContent = `Palettes (${unlockedPalettes} / ${PLAYER_PALETTES.length})`;
   palettes.innerHTML = PLAYER_PALETTES.map(p => {
     const ok = p.unlocked();
     const active = (d.playerPaletteId || 'classic') === p.id && ok;

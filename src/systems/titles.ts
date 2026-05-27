@@ -219,3 +219,33 @@ export function equipPalette(id: string): boolean {
   Storage.save();
   return true;
 }
+
+/** Human-readable unlock requirement for a locked title. */
+export function titleUnlockText(id: string): string {
+  switch (id) {
+    case 'bubble_sage':     return 'Gold every Tour level';
+    case 'daily_devotee':   return '7-day daily streak';
+    case 'boss_slayer':     return 'Unlock all levels';
+    case 'weekly_legend':   return '25 mission stars';
+    case 'mission_captain': return '12 mission stars';
+    case 'bank_master':     return '15 bank shots';
+    case 'air_artist':      return '20 air pops';
+    case 'clutch_hero':     return '3 clutch shots';
+    case 'danger_dancer':   return '20 close calls';
+    case 'detonator':       return 'Multi-pop chain ×5';
+    case 'marksman':        return '500 lifetime pops';
+    case 'airship_master':  return 'Gold all Airship levels';
+    case 'volcano_master':  return 'Gold all Volcano levels';
+    case 'city_master':     return 'Gold all City levels';
+    case 'arctic_master':   return 'Gold all Arctic levels';
+    case 'desert_master':   return 'Gold all Desert levels';
+    case 'beach_master':    return 'Gold all Beach levels';
+    case 'wave_rider':      return 'Reach Panic Wave 10';
+    case 'trickster':       return '25 lifetime tricks';
+    case 'combo_crusher':   return '×20 max combo';
+    case 'score_hunter':    return '20,000 Score Attack';
+    case 'streak_starter':  return '3-day daily streak';
+    case 'bubble_buster':   return 'Clear first level';
+    default: return 'Locked';
+  }
+}

@@ -243,14 +243,14 @@ export function buildMainMenu(game: Game): HTMLElement {
   });
   cta.appendChild(dailyBtn);
 
-  // Weekly Panic event
+  // Weekly event (Panic / Score Attack / Combo — rotates each week)
   const weeklyBtn = document.createElement('button');
   weeklyBtn.type = 'button';
   weeklyBtn.className = 'menu__daily menu__weekly';
   weeklyBtn.dataset.role = 'weekly';
   weeklyBtn.innerHTML = `
     <div>
-      <span class="menu__daily-title" data-role="weekly-title">WEEKLY PANIC</span>
+      <span class="menu__daily-title" data-role="weekly-title">WEEKLY EVENT</span>
       <span class="menu__daily-sub" data-role="weekly-sub">New target every week.</span>
     </div>
     <span class="menu__daily-streak" data-role="weekly-best"></span>
@@ -258,7 +258,9 @@ export function buildMainMenu(game: Game): HTMLElement {
   `;
   weeklyBtn.addEventListener('click', () => {
     AudioSys.menu();
-    game.startPanic();
+    const { mode } = getWeeklyEvent();
+    if (mode === 'panic') game.startPanic();
+    else game.startScoreAttack();
   });
   cta.appendChild(weeklyBtn);
 
@@ -418,12 +420,13 @@ export function syncMainMenu(game: Game, root: HTMLElement) {
   refs.dailyStreak.hidden = streak <= 0;
   if (streak > 0) setText(refs.dailyStreak, '🔥 ' + streak);
 
-  // --- Weekly Panic event ---
+  // --- Weekly event (mode-aware) ---
   const weekly = getWeeklyEvent();
-  setText(refs.weeklyTitle, weekly.label.toUpperCase());
+  const modeTag = weekly.mode === 'panic' ? 'WEEKLY PANIC' : weekly.mode === 'score_attack' ? 'WEEKLY SCORE ATTACK' : 'WEEKLY COMBO';
+  setText(refs.weeklyTitle, modeTag + ' · ' + weekly.label.toUpperCase());
   setText(refs.weeklySub, weekly.goalLabel);
   const weekBest = weeklyBestScore();
-  setText(refs.weeklyBest, weekBest > 0 ? fmtCompact(weekBest) : 'NEW');
+  setText(refs.weeklyBest, weekBest > 0 ? (weekly.mode === 'combo' ? '×' + weekBest : fmtCompact(weekBest)) : 'NEW');
 
   // --- Missions and next unlock ---
   setText(refs.missionStars, (Storage.data.missionStars || 0) + ' stars');

@@ -17,7 +17,7 @@ import { clearLevel, explodeProjectile, killPlayer, popBall } from './systems/co
 import { consumePressed, flushHoverSound, keysPressed, pointer, tickAutoFire, tickGamepadInputs } from './systems/input';
 import { Storage } from './systems/storage';
 import { pickDailyChallenge, type DailyPick } from './systems/daily';
-import { advanceMissions, getWeeklyEvent, recordWeeklyPanic } from './systems/retention';
+import { advanceMissions, getWeeklyEvent, recordWeeklyCombo, recordWeeklyPanic, recordWeeklyScoreAttack } from './systems/retention';
 import { computeTotalXp } from './systems/progression';
 // Aliased to Sdk to avoid colliding with the `Platform` entity class above.
 import { Platform as Sdk } from './systems/platform';
@@ -524,10 +524,14 @@ export class Game {
 
   saveRunBest() {
     let beatSomePB = false;
-    if (this.mode === 'score_attack' && this.score > Storage.data.bestScoreAttack) {
-      Storage.data.bestScoreAttack = this.score;
-      Storage.save();
-      beatSomePB = true;
+    if (this.mode === 'score_attack') {
+      if (this.score > Storage.data.bestScoreAttack) {
+        Storage.data.bestScoreAttack = this.score;
+        Storage.save();
+        beatSomePB = true;
+      }
+      const weeklySA = recordWeeklyScoreAttack(this.score);
+      if (weeklySA.rewarded) beatSomePB = true;
     }
     if (this.mode === 'panic') {
       const survivedWave = this.panicWave - 1;
@@ -563,6 +567,9 @@ export class Game {
       }
       Storage.save();
     }
+    // Combo weekly: applies to every mode — record this run's peak combo.
+    const weeklyCombo = recordWeeklyCombo(this.maxCombo);
+    if (weeklyCombo.rewarded) beatSomePB = true;
     // happytime() signals a player-satisfaction peak to CrazyGames. We fire
     // it on genuine personal-best moments only — overusing it makes the
     // signal meaningless and the platform discounts it.
