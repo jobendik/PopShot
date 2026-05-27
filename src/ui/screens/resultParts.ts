@@ -178,7 +178,7 @@ export function nextBestAction(game: Game): { text: string; sub?: string } {
     }
     const nextIdx = game.levelIndex + 1;
     if (nextIdx < LEVELS.length && nextIdx > game.unlockedLevel) {
-      return { text: 'Clear ' + L.name + ' to unlock ' + LEVELS[nextIdx].name };
+      return { text: (L ? 'Clear ' + L.name + ' to unlock ' : 'Unlock ') + LEVELS[nextIdx].name };
     }
     if (nextIdx < LEVELS.length) {
       return { text: 'Next: ' + LEVELS[nextIdx].name };

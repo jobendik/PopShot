@@ -64,7 +64,7 @@ const WEEKLY_EVENTS: WeeklyEventDef[] = [
   { label: 'Tour Blitz',   desc: 'Blast through stages. Tricks and chained pops stack points fast.',             mode: 'score_attack', scoreGoal: 40000, waveGoal: 0, comboGoal: 0, rewardStars: 5 },
   // Combo events — any mode counts, best run combo is tracked
   { label: 'Combo Craze',  desc: 'Keep your chain alive across any mode. Your peak combo this week is your score.', mode: 'combo', scoreGoal: 0, waveGoal: 0, comboGoal: 15, rewardStars: 4 },
-  { label: 'Chain Breaker',desc: 'Build the longest unbroken combo you can. Any mode qualifies.',                   mode: 'combo', scoreGoal: 0, waveGoal: 0, comboGoal: 20, rewardStars: 5 },
+  { label: 'Chain Breaker', desc: 'Build the longest unbroken combo you can. Any mode qualifies.',                   mode: 'combo', scoreGoal: 0, waveGoal: 0, comboGoal: 20, rewardStars: 5 },
 ];
 
 function hash32(s: string): number {
