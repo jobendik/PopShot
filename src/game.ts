@@ -18,6 +18,7 @@ import { consumePressed, flushHoverSound, keysPressed, pointer, tickAutoFire, ti
 import { Storage } from './systems/storage';
 import { pickDailyChallenge, type DailyPick } from './systems/daily';
 import { advanceMissions, getWeeklyEvent, recordWeeklyPanic } from './systems/retention';
+import { computeTotalXp } from './systems/progression';
 // Aliased to Sdk to avoid colliding with the `Platform` entity class above.
 import { Platform as Sdk } from './systems/platform';
 import { clamp, rand, randi } from './utils';
@@ -159,6 +160,14 @@ export class Game {
   /** Snapshot of lifetimeMaxCombo at the start of this level/run. After the
    *  run we compare run maxCombo against this to surface NEW COMBO BEST! */
   preRunMaxCombo: number;
+  /** Snapshot of total account XP at the start of this run, taken from
+   *  computeTotalXp(Storage.data). Result screens diff this against the
+   *  post-run projection to draw the +XP gained bar. */
+  preRunTotalXp: number;
+  /** Score at run-start of the current Tour stage (or 0 for non-Tour). Used
+   *  by the game-over / level-clear screens to compute "score improved by N"
+   *  and to detect score-improvement missions. */
+  preRunStageBest: number;
   /** Age of the first-run control hint, or -1 when inactive. */
   firstRunHintAge: number;
 
@@ -253,6 +262,8 @@ export class Game {
     this.chainCy = 0;
     this.runTricks = 0;
     this.preRunMaxCombo = 0;
+    this.preRunTotalXp = 0;
+    this.preRunStageBest = 0;
     this.firstRunHintAge = -1;
   }
 
@@ -342,6 +353,8 @@ export class Game {
     this.lives = 3;
     this.score = 0;
     this._resetRunFlags();
+    this.preRunTotalXp = computeTotalXp(Storage.data);
+    this.preRunStageBest = 0;
     this.panicWave = 0;
     this.theme = 'boss';
     this.levelName = 'PANIC MODE';
@@ -450,6 +463,10 @@ export class Game {
     this.chainCount = 0; this.chainTimer = 0;
     this.runTricks = 0;
     this.preRunMaxCombo = Storage.data.lifetimeMaxCombo || 0;
+    this.preRunTotalXp = computeTotalXp(Storage.data);
+    this.preRunStageBest = (this.mode === 'tour' || this.mode === 'score_attack')
+      ? (Storage.data.bestTour[L.id] || 0)
+      : 0;
     this.shake = 0; this.flash = 0; this.slowTime = 0; this.freezeTime = 0; this.magnetTime = 0; this.comboBoostTime = 0; this.hitPause = 0;
     this.bossDefeatedTimer = 0; this.lastTimerWarning = 0;
     this.player = new Player(W / 2, GROUND_Y);

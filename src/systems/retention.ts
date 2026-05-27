@@ -5,7 +5,7 @@ import { Storage } from './storage';
 import { FX } from '../ui/overlay/effects';
 import type { Game } from '../game';
 
-export type MissionKind = 'pop' | 'trick' | 'pickup' | 'level_clear' | 'score' | 'panic_wave';
+export type MissionKind = 'pop' | 'trick' | 'pickup' | 'level_clear' | 'score' | 'panic_wave' | 'medal' | 'score_improve' | 'multi_pop';
 
 export interface MissionDef {
   id: string;
@@ -39,6 +39,9 @@ const MISSION_DEFS: MissionDef[] = [
   { id: 'clear_2',      label: 'Clear 2 stages',        kind: 'level_clear', target: 2,     rewardStars: 1 },
   { id: 'score_15000',  label: 'Score 15,000 in a run', kind: 'score',       target: 15000, rewardStars: 2 },
   { id: 'panic_wave_6', label: 'Reach Panic Wave 6',    kind: 'panic_wave',  target: 6,     rewardStars: 2 },
+  { id: 'medal_any',    label: 'Earn any medal',        kind: 'medal',       target: 1,     rewardStars: 1 },
+  { id: 'improve_any',  label: 'Improve any stage score', kind: 'score_improve', target: 1, rewardStars: 1 },
+  { id: 'multi_pop_3',  label: 'Land a triple multi-pop', kind: 'multi_pop', target: 1,     rewardStars: 1 },
 ];
 
 const WEEKLY_EVENTS = [

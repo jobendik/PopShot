@@ -7,6 +7,8 @@ import { AudioSys } from '../../systems/audio';
 import { isTouchDevice } from '../../systems/input';
 import { Storage } from '../../systems/storage';
 import { applyTouchControlSettings } from '../hud/touchControls.html';
+import { activeMissions } from '../../systems/retention';
+import { computeAccountLevel } from '../../systems/progression';
 import type { Game } from '../../game';
 
 function restartCurrentRun(game: Game) {
@@ -26,6 +28,8 @@ export function buildPause(game: Game): HTMLElement {
   card.innerHTML = `
     <h2 class="ui-heading ui-heading--display overlay-card__title">Paused</h2>
     <div class="overlay-card__sub" data-role="level-name"></div>
+
+    <div class="pause__progress" data-role="progress" style="display:flex;flex-direction:column;gap:6px;margin:4px 0;"></div>
 
     <div class="ui-card pause__controls-card" style="padding: 14px;">
       <div style="font-size: var(--fs-micro); letter-spacing: 0.16em; opacity: 0.6; text-transform: uppercase; margin-bottom: 8px;">Controls</div>
@@ -129,6 +133,37 @@ export function buildPause(game: Game): HTMLElement {
 export function syncPause(game: Game, root: HTMLElement) {
   const levelEl = root.querySelector<HTMLElement>('[data-role="level-name"]');
   if (levelEl && levelEl.textContent !== game.levelName) levelEl.textContent = game.levelName;
+
+  // Pause progress summary — honest, non-guilt status of what is still in
+  // motion: account level, top 2 daily missions, current run score. Built
+  // once per pause-overlay lifecycle (overlay is rebuilt on every entry).
+  const prog = root.querySelector<HTMLElement>('[data-role="progress"]');
+  if (prog && !prog.dataset.populated) {
+    prog.dataset.populated = '1';
+    const lvl = computeAccountLevel(Storage.data);
+    const lvlPct = Math.max(0, Math.min(100, Math.round(lvl.ratio * 100)));
+    const missions = activeMissions().slice(0, 2);
+    const rows: string[] = [];
+    rows.push(`
+      <div class="result-section" style="margin:0;">
+        <div class="result-section__label"><span>Account · Lv ${lvl.level}</span><span style="opacity:0.7;">${lvl.inLevel} / ${lvl.xpForCurrent} XP</span></div>
+        <div class="result-mission__bar"><span style="width:${lvlPct}%;"></span></div>
+      </div>`);
+    for (const m of missions) {
+      const pct = Math.max(0, Math.min(100, Math.round((m.progress / m.target) * 100)));
+      const done = m.progress >= m.target;
+      rows.push(`
+        <div class="result-mission${done ? ' is-complete' : ''}">
+          <div class="result-mission__head">
+            <span class="result-mission__label">${m.label}</span>
+            <span class="result-mission__count">${Math.min(m.progress, m.target)} / ${m.target}</span>
+          </div>
+          <div class="result-mission__bar"><span style="width:${pct}%;"></span></div>
+        </div>`);
+    }
+    rows.push(`<div class="overlay-card__hint" style="margin-top:2px;">Progress is saved.</div>`);
+    prog.innerHTML = rows.join('');
+  }
 
   const controls = root.querySelector<HTMLElement>('[data-role="controls"]');
   if (controls && !controls.dataset.populated) {

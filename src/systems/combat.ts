@@ -437,6 +437,7 @@ export function clearLevel(game: Game) {
   const L = LEVELS[game.levelIndex];
   if (L && game.mode === 'tour') {
     const cur = Storage.data.bestTour[L.id] || 0;
+    const improvedExisting = cur > 0 && game.score > cur;
     if (game.score > cur) Storage.data.bestTour[L.id] = game.score;
     const newTier = medalFor(game.score, L.targetScore);
     const prevTier = Storage.data.medals[L.id] || 0;
@@ -444,6 +445,9 @@ export function clearLevel(game: Game) {
     game.unlockedLevel = Math.max(game.unlockedLevel, game.levelIndex + 1);
     Storage.data.unlockedLevel = game.unlockedLevel;
     Storage.save();
+    // Daily mission hooks tied to Tour clears specifically.
+    if (newTier > 0) advanceMissions('medal', 1);
+    if (improvedExisting) advanceMissions('score_improve', 1);
     // Medal callout for the run's tier earned. The level-clear screen
     // shows the full breakdown; this is the in-the-moment celebration.
     // Bronze/silver/gold map directly to the existing medal tier values.

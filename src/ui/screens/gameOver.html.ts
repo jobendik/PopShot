@@ -6,9 +6,13 @@
 import { DEATH_REASON_TEXT, State } from '../../constants';
 import { AudioSys } from '../../systems/audio';
 import { Storage } from '../../systems/storage';
-import { activeMissions, deathTipFor, nextUnlockHint } from '../../systems/retention';
+import { deathTipFor } from '../../systems/retention';
 import { emit } from '../../systems/analytics';
 import { canRewardedContinue, startRewardedContinue } from '../../state/gameOver';
+import {
+  missionsBlock, weeklyBlock, xpBarBlock, syncXpBar,
+  nextBestActionBlock, almostCallout,
+} from './resultParts';
 import type { Game } from '../../game';
 
 export function buildGameOver(game: Game): HTMLElement {
@@ -23,8 +27,13 @@ export function buildGameOver(game: Game): HTMLElement {
     <div class="gameover__warning" data-role="warning">Run Ended</div>
     <h2 class="ui-heading ui-heading--display ui-heading--fail overlay-card__title">Game Over</h2>
     <p class="daily__desc" data-role="reason" hidden></p>
+    <div class="result-almost" data-role="almost" hidden></div>
     <p class="gameover__tip" data-role="tip"></p>
     <div class="overlay-card__stats" data-role="stats"></div>
+    <div data-role="missions"></div>
+    <div data-role="weekly"></div>
+    <div data-role="xp"></div>
+    <div data-role="nba"></div>
     <div class="overlay-card__actions">
       <button type="button" class="ui-btn ui-btn--success" data-role="continue" hidden>▶  Watch Ad to Continue</button>
       <button type="button" class="ui-btn ui-btn--cta"     data-role="retry">Retry</button>
@@ -83,9 +92,11 @@ export function syncGameOver(game: Game, root: HTMLElement) {
       rows.push({ label: 'Best Run',        value: Math.max(Storage.data.bestBossRushCount || 0, game.bossRushCount) + ' bosses' });
       rows.push({ label: 'Best Score',      value: Math.max(Storage.data.bestBossRush || 0, game.score).toLocaleString() });
     }
-    const missionsDone = activeMissions().filter(m => m.complete).length;
-    rows.push({ label: 'Daily Missions', value: missionsDone + ' / 3' });
-    rows.push({ label: 'Next Unlock', value: nextUnlockHint(), cls: 'ui-stat-row__value--note' });
+    if (game.shotsFired > 0) {
+      const acc = Math.round((game.shotsHit / game.shotsFired) * 100);
+      rows.push({ label: 'Accuracy', value: acc + '%' });
+    }
+    if (game.maxCombo > 1) rows.push({ label: 'Max Combo', value: '×' + game.maxCombo });
     const html = rows.map(r => `
       <div class="ui-stat-row">
         <span class="ui-stat-row__label">${r.label}</span>
@@ -94,6 +105,34 @@ export function syncGameOver(game: Game, root: HTMLElement) {
     `).join('');
     if (stats.innerHTML !== html) stats.innerHTML = html;
   }
+
+  // "You almost…" comeback callout — turns a loss into useful feedback.
+  const almost = root.querySelector<HTMLElement>('[data-role="almost"]');
+  if (almost && !almost.dataset.populated) {
+    almost.dataset.populated = '1';
+    const cb = almostCallout(game);
+    if (cb) {
+      almost.hidden = false;
+      almost.innerHTML = '<span class="result-almost__icon">★</span> ' + cb.text;
+      almost.dataset.kind = cb.kind;
+    } else {
+      almost.hidden = true;
+    }
+  }
+
+  // Daily mission bars, weekly row, XP bar, next-best-action.
+  const missions = root.querySelector<HTMLElement>('[data-role="missions"]');
+  if (missions && !missions.dataset.populated) { missions.innerHTML = missionsBlock(); missions.dataset.populated = '1'; }
+  const weekly = root.querySelector<HTMLElement>('[data-role="weekly"]');
+  if (weekly && !weekly.dataset.populated) { weekly.innerHTML = weeklyBlock(); weekly.dataset.populated = '1'; }
+  const xp = root.querySelector<HTMLElement>('[data-role="xp"]');
+  if (xp && !xp.dataset.populated) {
+    xp.innerHTML = xpBarBlock(game.preRunTotalXp);
+    xp.dataset.populated = '1';
+    syncXpBar(xp);
+  }
+  const nba = root.querySelector<HTMLElement>('[data-role="nba"]');
+  if (nba && !nba.dataset.populated) { nba.innerHTML = nextBestActionBlock(game); nba.dataset.populated = '1'; }
 
   const tip = root.querySelector<HTMLElement>('[data-role="tip"]');
   if (tip) {

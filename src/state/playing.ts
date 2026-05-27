@@ -10,6 +10,7 @@ import { resolveCollisions } from '../systems/collisions';
 import { consumePressed, isTouchDevice, keysPressed, pointer } from '../systems/input';
 import { Platform as Sdk } from '../systems/platform';
 import { Storage } from '../systems/storage';
+import { advanceMissions } from '../systems/retention';
 import { clamp } from '../utils';
 import { FX } from '../ui/overlay/effects';
 import type { Game } from '../game';
@@ -115,6 +116,7 @@ export function updatePlaying(game: Game, dt: number) {
       if (n > (Storage.data.bestMultiPop || 0)) {
         Storage.data.bestMultiPop = n;
       }
+      if (n >= 3) advanceMissions('multi_pop', 1);
       Storage.save();
     }
     if (game.chainTimer <= 0) {

@@ -6,8 +6,16 @@
 import { State } from '../../constants';
 import { AudioSys } from '../../systems/audio';
 import { Storage } from '../../systems/storage';
-import { activeMissions, nextUnlockHint } from '../../systems/retention';
+import { LEVELS } from '../../data/levels';
+import { advanceFromLevelClear } from '../../state/levelClear';
+import {
+  missionsBlock, weeklyBlock, xpBarBlock, syncXpBar,
+  nextBestActionBlock, levelClearHeadline,
+} from './resultParts';
 import type { Game } from '../../game';
+
+// Re-exported to keep the buildVictory section's existing reference happy.
+void Storage;
 
 function confettiLayer(count = 24): HTMLElement {
   const wrap = document.createElement('div');
@@ -22,7 +30,7 @@ function confettiLayer(count = 24): HTMLElement {
   return wrap;
 }
 
-export function buildLevelClear(_game: Game): HTMLElement {
+export function buildLevelClear(game: Game): HTMLElement {
   const root = document.createElement('section');
   root.className = 'ui-screen clear overlay-screen';
   root.setAttribute('data-screen', 'level_clear');
@@ -31,53 +39,98 @@ export function buildLevelClear(_game: Game): HTMLElement {
   const card = document.createElement('div');
   card.className = 'overlay-card';
   card.appendChild(confettiLayer(20));
-  const stats = document.createElement('div');
-  stats.className = 'overlay-card__stats clear__stat-list';
-  stats.dataset.role = 'stats';
   card.innerHTML = `
-    <h2 class="ui-heading ui-heading--display ui-heading--win overlay-card__title">Level Clear!</h2>
+    <h2 class="ui-heading ui-heading--display ui-heading--win overlay-card__title" data-role="headline">Level Clear!</h2>
     <div class="overlay-card__sub" data-role="level-name"></div>
+    <div class="overlay-card__stats clear__stat-list" data-role="stats"></div>
+    <div data-role="missions"></div>
+    <div data-role="weekly"></div>
+    <div data-role="xp"></div>
+    <div data-role="nba"></div>
+    <div class="overlay-card__actions" data-role="actions">
+      <button type="button" class="ui-btn ui-btn--cta"   data-role="next">Next Level</button>
+      <button type="button" class="ui-btn ui-btn--ghost" data-role="retry">Retry</button>
+      <button type="button" class="ui-btn ui-btn--ghost" data-role="menu">Main Menu</button>
+    </div>
+    <div class="overlay-card__hint" data-role="hint">Press any key for Next</div>
   `;
-  const confetti = confettiLayer(20);
-  card.appendChild(confetti);
-  card.appendChild(stats);
-  const hint = document.createElement('div');
-  hint.className = 'overlay-card__hint';
-  hint.textContent = 'Press any key to continue';
-  card.appendChild(hint);
+  card.appendChild(confettiLayer(20));
 
   root.appendChild(card);
+
+  card.querySelector<HTMLElement>('[data-role="next"]')!.addEventListener('click', () => {
+    advanceFromLevelClear(game);
+  });
+  card.querySelector<HTMLElement>('[data-role="retry"]')!.addEventListener('click', () => {
+    AudioSys.menu();
+    retryCurrent(game);
+  });
+  card.querySelector<HTMLElement>('[data-role="menu"]')!.addEventListener('click', () => {
+    AudioSys.menu();
+    game.state = State.MAIN_MENU;
+  });
+
   return root;
 }
 
+function retryCurrent(game: Game) {
+  if (game.mode === 'score_attack') return game.startScoreAttack();
+  if (game.mode === 'panic')        return game.startPanic();
+  if (game.mode === 'boss_rush')    return game.startBossRush();
+  return game.loadLevel(game.levelIndex);
+}
+
 export function syncLevelClear(game: Game, root: HTMLElement) {
+  const headlineEl = root.querySelector<HTMLElement>('[data-role="headline"]');
+  if (headlineEl) headlineEl.textContent = levelClearHeadline(game);
+
   const nameEl = root.querySelector<HTMLElement>('[data-role="level-name"]');
   if (nameEl) nameEl.textContent = game.levelName;
+
   const stats = root.querySelector<HTMLElement>('[data-role="stats"]');
-  if (!stats) return;
-  const s = game.summary;
-  if (!s) { stats.innerHTML = ''; return; }
-  const rows: { label: string; value: string; cls?: string }[] = [
-    { label: 'Base Score', value: '+' + s.base.toLocaleString() },
-    { label: 'Time Bonus', value: '+' + s.time.toLocaleString() },
-    { label: 'Accuracy',   value: '+' + s.accuracy.toLocaleString() },
-    { label: 'Combo',      value: '+' + s.combo.toLocaleString() },
-    { label: 'No-Miss',    value: '+' + s.noMiss.toLocaleString() },
-  ];
-  if (s.tricks > 0) rows.push({ label: 'Tricks', value: '×' + s.tricks });
-  rows.push({ label: 'Total', value: s.total.toLocaleString(), cls: 'ui-stat-row__value--win' });
-  if (s.best > 0) rows.push({ label: 'Best', value: s.best.toLocaleString(), cls: 'ui-stat-row__value--best' });
-  if (s.newComboBest) rows.push({ label: 'NEW COMBO BEST', value: '!', cls: 'ui-stat-row__value--win' });
-  const missionsDone = activeMissions().filter(m => m.complete).length;
-  rows.push({ label: 'Daily Missions', value: missionsDone + ' / 3' });
-  rows.push({ label: 'Next Unlock', value: nextUnlockHint(), cls: 'ui-stat-row__value--note' });
-  const html = rows.map(r => `
-    <div class="ui-stat-row">
-      <span class="ui-stat-row__label">${r.label}</span>
-      <span class="ui-stat-row__value ${r.cls || ''}">${r.value}</span>
-    </div>
-  `).join('');
-  if (stats.innerHTML !== html) stats.innerHTML = html;
+  if (stats && game.summary) {
+    const s = game.summary;
+    const rows: { label: string; value: string; cls?: string }[] = [
+      { label: 'Base Score', value: '+' + s.base.toLocaleString() },
+      { label: 'Time Bonus', value: '+' + s.time.toLocaleString() },
+      { label: 'Accuracy',   value: '+' + s.accuracy.toLocaleString() },
+      { label: 'Combo',      value: '+' + s.combo.toLocaleString() },
+      { label: 'No-Miss',    value: '+' + s.noMiss.toLocaleString() },
+    ];
+    if (s.tricks > 0) rows.push({ label: 'Tricks', value: '×' + s.tricks });
+    rows.push({ label: 'Total', value: s.total.toLocaleString(), cls: 'ui-stat-row__value--win' });
+    if (s.best > 0) rows.push({ label: 'Best', value: s.best.toLocaleString(), cls: 'ui-stat-row__value--best' });
+    if (s.newComboBest) rows.push({ label: 'NEW COMBO BEST', value: '!', cls: 'ui-stat-row__value--win' });
+    const html = rows.map(r => `
+      <div class="ui-stat-row">
+        <span class="ui-stat-row__label">${r.label}</span>
+        <span class="ui-stat-row__value ${r.cls || ''}">${r.value}</span>
+      </div>
+    `).join('');
+    if (stats.innerHTML !== html) stats.innerHTML = html;
+  }
+
+  const missions = root.querySelector<HTMLElement>('[data-role="missions"]');
+  if (missions && !missions.dataset.populated) { missions.innerHTML = missionsBlock(); missions.dataset.populated = '1'; }
+  const weekly = root.querySelector<HTMLElement>('[data-role="weekly"]');
+  if (weekly && !weekly.dataset.populated) { weekly.innerHTML = weeklyBlock(); weekly.dataset.populated = '1'; }
+  const xp = root.querySelector<HTMLElement>('[data-role="xp"]');
+  if (xp && !xp.dataset.populated) {
+    xp.innerHTML = xpBarBlock(game.preRunTotalXp);
+    xp.dataset.populated = '1';
+    syncXpBar(xp);
+  }
+  const nba = root.querySelector<HTMLElement>('[data-role="nba"]');
+  if (nba && !nba.dataset.populated) { nba.innerHTML = nextBestActionBlock(game); nba.dataset.populated = '1'; }
+
+  // Hide "Next Level" on the last Tour stage; only show Retry/Menu.
+  const nextBtn = root.querySelector<HTMLElement>('[data-role="next"]');
+  if (nextBtn) {
+    const showNext = game.mode === 'tour'
+      ? game.levelIndex + 1 < LEVELS.length
+      : game.mode === 'score_attack';
+    nextBtn.hidden = !showNext;
+  }
 }
 
 export function buildBossDefeated(_game: Game): HTMLElement {
