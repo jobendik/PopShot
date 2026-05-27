@@ -7,50 +7,54 @@ import { UI } from '../ui/domRoot';
 import type { Game } from '../game';
 
 // ---------------- LEVEL CLEAR ----------------
-export function updateLevelClear(game: Game) {
-  if (game.awaitingAd) return; // ad in flight — ignore further input until it resolves
-  if (consumeAnyConfirm()) {
-    AudioSys.menu();
-    game.summary = null;
-    if (game.bossLevel) {
-      // Boss Rush: pull the next boss from the queue. If empty, we've
-      // completed the rush — go to VICTORY (it doubles as the BR result).
-      if (game.mode === 'boss_rush') {
-        game.bossRushCount++;
-        const nextBossIndex = game.bossRushQueue.shift();
-        if (nextBossIndex == null) {
-          game.saveRunBest();
-          game.state = State.VICTORY;
-          return;
-        }
-        game.loadLevel(nextBossIndex);
-        game.introTitle = 'BOSS ' + (game.bossRushCount + 1);
-        game.introText = 'Defeat every boss in sequence.';
-        game.introTimer = 3;
+/** Advance from a level-clear to the next stage. Honors Boss Rush queue,
+ *  Score Attack wrap, midgame ad cadence, and the final-level VICTORY path.
+ *  Invoked by both the keyboard "any key to continue" path AND the
+ *  on-screen Next Level button. */
+export function advanceFromLevelClear(game: Game): void {
+  AudioSys.menu();
+  game.summary = null;
+  if (game.bossLevel) {
+    if (game.mode === 'boss_rush') {
+      game.bossRushCount++;
+      const nextBossIndex = game.bossRushQueue.shift();
+      if (nextBossIndex == null) {
+        game.saveRunBest();
+        game.state = State.VICTORY;
         return;
       }
-      game.state = State.VICTORY;
+      game.loadLevel(nextBossIndex);
+      game.introTitle = 'BOSS ' + (game.bossRushCount + 1);
+      game.introText = 'Defeat every boss in sequence.';
+      game.introTimer = 3;
       return;
     }
-    const next = game.levelIndex + 1;
-    if (next >= LEVELS.length) { game.state = State.VICTORY; return; }
-    const targetIndex = game.mode === 'score_attack' ? (next % LEVELS.length) : next;
-
-    // CrazyGames hygiene: midgame ad between Tour levels — but never before
-    // the player has cleared at least one level in this session.
-    const shouldAd = game.mode === 'tour' && game.sessionLevelsCleared >= 1;
-    game.sessionLevelsCleared++;
-    if (shouldAd) {
-      game.awaitingAd = true;
-      Sdk.gameplayStop();
-      Sdk.requestMidgameAd().finally(() => {
-        game.awaitingAd = false;
-        game.loadLevel(targetIndex);
-      });
-    } else {
-      game.loadLevel(targetIndex);
-    }
+    game.state = State.VICTORY;
+    return;
   }
+  const next = game.levelIndex + 1;
+  if (next >= LEVELS.length) { game.state = State.VICTORY; return; }
+  const targetIndex = game.mode === 'score_attack' ? (next % LEVELS.length) : next;
+
+  // CrazyGames hygiene: midgame ad between Tour levels — but never before
+  // the player has cleared at least one level in this session.
+  const shouldAd = game.mode === 'tour' && game.sessionLevelsCleared >= 1;
+  game.sessionLevelsCleared++;
+  if (shouldAd) {
+    game.awaitingAd = true;
+    Sdk.gameplayStop();
+    Sdk.requestMidgameAd().finally(() => {
+      game.awaitingAd = false;
+      game.loadLevel(targetIndex);
+    });
+  } else {
+    game.loadLevel(targetIndex);
+  }
+}
+
+export function updateLevelClear(game: Game) {
+  if (game.awaitingAd) return; // ad in flight — ignore further input until it resolves
+  if (consumeAnyConfirm()) advanceFromLevelClear(game);
 }
 
 export function renderLevelClear(game: Game) {

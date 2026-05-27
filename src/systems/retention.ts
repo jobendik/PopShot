@@ -5,7 +5,7 @@ import { Storage } from './storage';
 import { FX } from '../ui/overlay/effects';
 import type { Game } from '../game';
 
-export type MissionKind = 'pop' | 'trick' | 'pickup' | 'level_clear' | 'score' | 'panic_wave';
+export type MissionKind = 'pop' | 'trick' | 'pickup' | 'level_clear' | 'score' | 'panic_wave' | 'medal' | 'score_improve' | 'multi_pop';
 
 export interface MissionDef {
   id: string;
@@ -21,16 +21,25 @@ export interface MissionView extends MissionDef {
   complete: boolean;
 }
 
+/** Which game activity a weekly event targets. */
+export type WeeklyMode = 'panic' | 'score_attack' | 'combo';
+
 export interface WeeklyEvent {
   id: string;
   weekId: string;
   label: string;
   desc: string;
   goalLabel: string;
+  /** Mode that counts toward this week's goal. */
+  mode: WeeklyMode;
   scoreGoal: number;
   waveGoal: number;
+  /** Minimum max-combo to fulfil a 'combo' event. 0 for non-combo events. */
+  comboGoal: number;
   rewardStars: number;
 }
+
+type WeeklyEventDef = Omit<WeeklyEvent, 'id' | 'weekId' | 'goalLabel'>;
 
 const MISSION_DEFS: MissionDef[] = [
   { id: 'pop_60',       label: 'Pop 60 bubbles',       kind: 'pop',         target: 60,    rewardStars: 1 },
@@ -39,14 +48,24 @@ const MISSION_DEFS: MissionDef[] = [
   { id: 'clear_2',      label: 'Clear 2 stages',        kind: 'level_clear', target: 2,     rewardStars: 1 },
   { id: 'score_15000',  label: 'Score 15,000 in a run', kind: 'score',       target: 15000, rewardStars: 2 },
   { id: 'panic_wave_6', label: 'Reach Panic Wave 6',    kind: 'panic_wave',  target: 6,     rewardStars: 2 },
+  { id: 'medal_any',    label: 'Earn any medal',        kind: 'medal',       target: 1,     rewardStars: 1 },
+  { id: 'improve_any',  label: 'Improve any stage score', kind: 'score_improve', target: 1, rewardStars: 1 },
+  { id: 'multi_pop_3',  label: 'Land a triple multi-pop', kind: 'multi_pop', target: 1,     rewardStars: 1 },
 ];
 
-const WEEKLY_EVENTS = [
-  { label: 'Rainbow Rush', desc: 'Push Panic Mode for score. Star Bubbles decide the run.', scoreGoal: 35000, waveGoal: 8, rewardStars: 4 },
-  { label: 'Wave Climb',   desc: 'Survive deep waves. Safe movement beats greedy shots.',   scoreGoal: 25000, waveGoal: 10, rewardStars: 4 },
-  { label: 'Combo Panic',  desc: 'Keep chains alive while the board fills up.',             scoreGoal: 45000, waveGoal: 7, rewardStars: 5 },
-  { label: 'No Fear Week', desc: 'Close calls and quick clears turn into big scores.',      scoreGoal: 30000, waveGoal: 9, rewardStars: 4 },
-] as const;
+const WEEKLY_EVENTS: WeeklyEventDef[] = [
+  // Panic events
+  { label: 'Rainbow Rush', desc: 'Push Panic Mode for score. Star Bubbles decide the run.', mode: 'panic',        scoreGoal: 35000, waveGoal: 8,  comboGoal: 0, rewardStars: 4 },
+  { label: 'Wave Climb',   desc: 'Survive deep waves. Safe movement beats greedy shots.',   mode: 'panic',        scoreGoal: 25000, waveGoal: 10, comboGoal: 0, rewardStars: 4 },
+  { label: 'Combo Panic',  desc: 'Keep chains alive while the board fills up.',             mode: 'panic',        scoreGoal: 45000, waveGoal: 7,  comboGoal: 0, rewardStars: 5 },
+  { label: 'No Fear Week', desc: 'Close calls and quick clears turn into big scores.',      mode: 'panic',        scoreGoal: 30000, waveGoal: 9,  comboGoal: 0, rewardStars: 4 },
+  // Score Attack events
+  { label: 'Score Sprint', desc: 'Race through Tour levels for the highest single-run score in Score Attack.',    mode: 'score_attack', scoreGoal: 30000, waveGoal: 0, comboGoal: 0, rewardStars: 4 },
+  { label: 'Tour Blitz',   desc: 'Blast through stages. Tricks and chained pops stack points fast.',             mode: 'score_attack', scoreGoal: 40000, waveGoal: 0, comboGoal: 0, rewardStars: 5 },
+  // Combo events — any mode counts, best run combo is tracked
+  { label: 'Combo Craze',  desc: 'Keep your chain alive across any mode. Your peak combo this week is your score.', mode: 'combo', scoreGoal: 0, waveGoal: 0, comboGoal: 15, rewardStars: 4 },
+  { label: 'Chain Breaker', desc: 'Build the longest unbroken combo you can. Any mode qualifies.',                   mode: 'combo', scoreGoal: 0, waveGoal: 0, comboGoal: 20, rewardStars: 5 },
+];
 
 function hash32(s: string): number {
   let h = 2166136261 >>> 0;
@@ -121,14 +140,23 @@ export function advanceMissions(kind: MissionKind, amount = 1, value = 0): Missi
 export function getWeeklyEvent(): WeeklyEvent {
   const weekId = currentWeekId();
   const base = WEEKLY_EVENTS[hash32(weekId) % WEEKLY_EVENTS.length];
+  let goalLabel: string;
+  if (base.mode === 'combo') {
+    goalLabel = 'Goal: Combo ×' + base.comboGoal + ' in any mode';
+  } else if (base.mode === 'score_attack') {
+    goalLabel = 'Goal: ' + base.scoreGoal.toLocaleString() + ' in Score Attack';
+  } else {
+    goalLabel = 'Goal: Wave ' + base.waveGoal + ' or ' + base.scoreGoal.toLocaleString() + ' score';
+  }
   return {
     ...base,
     id: weekId + ':' + base.label.toLowerCase().replace(/\s+/g, '_'),
     weekId,
-    goalLabel: 'Goal: Wave ' + base.waveGoal + ' or ' + base.scoreGoal.toLocaleString() + ' score',
+    goalLabel,
   };
 }
 
+/** Best metric stored for the current weekly event (score or max-combo value). */
 export function weeklyBestScore(): number {
   const event = getWeeklyEvent();
   return Storage.data.weeklyPanicBest?.[event.id] || 0;
@@ -136,6 +164,7 @@ export function weeklyBestScore(): number {
 
 export function recordWeeklyPanic(score: number, wave: number): { newBest: boolean; rewarded: boolean } {
   const event = getWeeklyEvent();
+  if (event.mode !== 'panic') return { newBest: false, rewarded: false };
   if (!Storage.data.weeklyPanicBest) Storage.data.weeklyPanicBest = {};
   const before = Storage.data.weeklyPanicBest[event.id] || 0;
   const newBest = score > before;
@@ -150,6 +179,50 @@ export function recordWeeklyPanic(score: number, wave: number): { newBest: boole
     Storage.data.missionStars = (Storage.data.missionStars || 0) + event.rewardStars;
     FX.toast('success', 'WEEKLY COMPLETE', '+' + event.rewardStars + ' mission stars');
     emit('weekly.reward', { event: event.id, score, wave, stars: event.rewardStars });
+    rewarded = true;
+  }
+  if (newBest || rewarded) Storage.save();
+  return { newBest, rewarded };
+}
+
+export function recordWeeklyScoreAttack(score: number): { newBest: boolean; rewarded: boolean } {
+  const event = getWeeklyEvent();
+  if (event.mode !== 'score_attack') return { newBest: false, rewarded: false };
+  if (!Storage.data.weeklyPanicBest) Storage.data.weeklyPanicBest = {};
+  const before = Storage.data.weeklyPanicBest[event.id] || 0;
+  const newBest = score > before;
+  if (newBest) {
+    Storage.data.weeklyPanicBest[event.id] = score;
+    emit('weekly.best', { event: event.id, score });
+  }
+  let rewarded = false;
+  if (score >= event.scoreGoal && Storage.data.weeklyRewardClaimed !== event.weekId) {
+    Storage.data.weeklyRewardClaimed = event.weekId;
+    Storage.data.missionStars = (Storage.data.missionStars || 0) + event.rewardStars;
+    FX.toast('success', 'WEEKLY COMPLETE', '+' + event.rewardStars + ' mission stars');
+    emit('weekly.reward', { event: event.id, score, stars: event.rewardStars });
+    rewarded = true;
+  }
+  if (newBest || rewarded) Storage.save();
+  return { newBest, rewarded };
+}
+
+export function recordWeeklyCombo(maxCombo: number): { newBest: boolean; rewarded: boolean } {
+  const event = getWeeklyEvent();
+  if (event.mode !== 'combo') return { newBest: false, rewarded: false };
+  if (!Storage.data.weeklyPanicBest) Storage.data.weeklyPanicBest = {};
+  const before = Storage.data.weeklyPanicBest[event.id] || 0;
+  const newBest = maxCombo > before;
+  if (newBest) {
+    Storage.data.weeklyPanicBest[event.id] = maxCombo;
+    emit('weekly.best', { event: event.id, combo: maxCombo });
+  }
+  let rewarded = false;
+  if (maxCombo >= event.comboGoal && Storage.data.weeklyRewardClaimed !== event.weekId) {
+    Storage.data.weeklyRewardClaimed = event.weekId;
+    Storage.data.missionStars = (Storage.data.missionStars || 0) + event.rewardStars;
+    FX.toast('success', 'WEEKLY COMPLETE', '+' + event.rewardStars + ' mission stars');
+    emit('weekly.reward', { event: event.id, combo: maxCombo, stars: event.rewardStars });
     rewarded = true;
   }
   if (newBest || rewarded) Storage.save();
