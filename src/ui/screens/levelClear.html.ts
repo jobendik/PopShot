@@ -5,7 +5,6 @@
 
 import { State } from '../../constants';
 import { AudioSys } from '../../systems/audio';
-import { Storage } from '../../systems/storage';
 import { LEVELS } from '../../data/levels';
 import { advanceFromLevelClear } from '../../state/levelClear';
 import {
@@ -13,9 +12,6 @@ import {
   nextBestActionBlock, levelClearHeadline,
 } from './resultParts';
 import type { Game } from '../../game';
-
-// Re-exported to keep the buildVictory section's existing reference happy.
-void Storage;
 
 function confettiLayer(count = 24): HTMLElement {
   const wrap = document.createElement('div');
@@ -192,5 +188,4 @@ export function syncVictory(game: Game, root: HTMLElement) {
   if (score) score.textContent = game.score.toLocaleString();
   const bc = root.querySelector<HTMLElement>('[data-role="boss-count"]');
   if (bc) bc.textContent = String(game.bossRushCount || (game.mode === 'tour' ? 1 : 0));
-  void Storage;
 }

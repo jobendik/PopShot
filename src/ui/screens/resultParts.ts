@@ -117,7 +117,7 @@ export function syncXpBar(root: HTMLElement): void {
     } else if (levelLabel) {
       levelLabel.textContent = 'Lv ' + afterLevel;
     }
-    void sub; // currentl static; left as a hook for future per-second drain
+    void sub; // currently static; left as a hook for future per-second drain
   }, 350);
 }
 
@@ -214,7 +214,7 @@ export function almostCallout(game: Game): { text: string; kind: 'mission' | 'me
     .map(m => ({ m, left: m.target - m.progress, frac: m.progress / m.target }))
     .filter(x => x.frac >= 0.7)
     .sort((a, b) => b.frac - a.frac)[0];
-  if (near) return { text: near.left + ' ' + near.m.label.toLowerCase().replace(/^[a-z]/, c => c) + ' from done', kind: 'mission' };
+  if (near) return { text: near.left + ' ' + near.m.label.toLowerCase() + ' from done', kind: 'mission' };
 
   if (game.mode === 'panic') {
     const bestWave = Storage.data.bestPanicWave || 0;
