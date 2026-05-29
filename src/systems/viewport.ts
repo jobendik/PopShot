@@ -5,10 +5,14 @@
  * off. `visualViewport` is the reliable source on iPhone; fall back to the
  * layout viewport elsewhere.
  */
+let installed = false;
+
 export function installViewportSizing() {
   if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  if (installed) return;
+  installed = true;
 
-  let raf = 0;
+  let rafId = 0;
   const root = document.documentElement;
 
   const readViewport = () => {
@@ -22,15 +26,15 @@ export function installViewportSizing() {
   };
 
   const apply = () => {
-    raf = 0;
+    rafId = 0;
     const { width, height } = readViewport();
     root.style.setProperty('--app-vw', `${width}px`);
     root.style.setProperty('--app-vh', `${height}px`);
   };
 
   const schedule = () => {
-    if (raf) return;
-    raf = window.requestAnimationFrame(apply);
+    if (rafId) return;
+    rafId = window.requestAnimationFrame(apply);
   };
 
   apply();
