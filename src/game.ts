@@ -43,6 +43,12 @@ import { updateDailyIntro,  renderDailyIntro,
          updateDailyResult, renderDailyResult }                   from './state/daily';
 
 // ============================ GAME ==================================
+// devicePixelRatio clamp for the canvas backing store. We honour the device's
+// real DPR for crisp rendering, but cap it at 3 so we don't allocate huge
+// backing stores (e.g. 4x phones) for negligible visual gain / GC pressure.
+const MIN_DPR = 1;
+const MAX_DPR = 3;
+
 export interface LevelSummary {
   base: number;
   time: number;
@@ -677,7 +683,7 @@ export class Game {
     const cssW = this.canvas.clientWidth;
     const cssH = this.canvas.clientHeight;
     if (!cssW || !cssH) return;
-    const dpr = Math.min(Math.max(window.devicePixelRatio || 1, 1), 3);
+    const dpr = Math.min(Math.max(window.devicePixelRatio || 1, MIN_DPR), MAX_DPR);
     const bw = Math.max(1, Math.round(cssW * dpr));
     const bh = Math.max(1, Math.round(cssH * dpr));
     if (this.canvas.width !== bw || this.canvas.height !== bh) {

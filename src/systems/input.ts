@@ -163,6 +163,8 @@ window.addEventListener('blur', () => {
 // tap of a rapid pair. Interactive HTML controls (pause, menu buttons) are
 // exempted so their tap → synthetic click still fires.
 if (typeof document !== 'undefined') {
+  // Max gap (ms) between two taps for the pair to count as a double-tap.
+  const DOUBLE_TAP_MS = 300;
   const stopGesture = (e: Event) => e.preventDefault();
   for (const evt of ['gesturestart', 'gesturechange', 'gestureend']) {
     document.addEventListener(evt, stopGesture, { passive: false });
@@ -172,7 +174,10 @@ if (typeof document !== 'undefined') {
     const now = Date.now();
     const target = e.target as HTMLElement | null;
     const interactive = !!target?.closest('button, a, input, select, textarea, [role="button"]');
-    if (now - lastTouchEnd <= 300 && !interactive) e.preventDefault();
+    // Two taps within DOUBLE_TAP_MS are what browsers treat as a double-tap
+    // (the same window used for the legacy 300ms click delay); cancelling the
+    // second one suppresses the zoom without affecting normal single taps.
+    if (now - lastTouchEnd <= DOUBLE_TAP_MS && !interactive) e.preventDefault();
     lastTouchEnd = now;
   }, { passive: false });
   document.addEventListener('dblclick', (e: MouseEvent) => {
