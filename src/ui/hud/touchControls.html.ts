@@ -44,7 +44,9 @@ const held: Record<BtnId, boolean> = { left: false, right: false, fire: false };
  *  Derived from the right zone element so it tracks CSS layout exactly. */
 function zoneSplitX(): number {
   if (buttons.right) return buttons.right.getBoundingClientRect().left;
-  // Fallback (should never reach here after mount)
+  // Should never reach here after buildTouchControls() has run. Fallback to
+  // viewport centre so hits are still processed correctly if it somehow does.
+  if (import.meta.env.DEV) console.warn('[touchControls] zoneSplitX: buttons.right is null');
   return window.innerWidth / 2;
 }
 

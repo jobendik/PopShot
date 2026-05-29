@@ -511,7 +511,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .touch-btn { transition: none; }
-  .touch-btn.is-held { transform: translateX(-50%); }
+  /* Fire button must keep its translateX(-50%) centering even with no press
+     animation; the non-fire movement zones have no transform to worry about. */
   .touch-btn--fire.is-held { transform: translateX(-50%); }
 }
 
