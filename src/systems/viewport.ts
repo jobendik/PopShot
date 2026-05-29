@@ -5,13 +5,14 @@
  * off. `visualViewport` is the reliable source on iPhone; fall back to the
  * layout viewport elsewhere.
  */
+const noopCleanup = () => {};
 let uninstallViewportSizing: (() => void) | null = null;
 
 export function installViewportSizing() {
-  if (typeof window === 'undefined' || typeof document === 'undefined') return undefined;
+  if (typeof window === 'undefined' || typeof document === 'undefined') return noopCleanup;
   if (uninstallViewportSizing) return uninstallViewportSizing;
 
-  let pendingAnimationFrameId = 0;
+  let pendingAnimationFrameId: number | null = null;
   const root = document.documentElement;
   const visualViewport = window.visualViewport;
 
@@ -26,14 +27,14 @@ export function installViewportSizing() {
   };
 
   const apply = () => {
-    pendingAnimationFrameId = 0;
+    pendingAnimationFrameId = null;
     const { width, height } = readViewport();
     root.style.setProperty('--app-vw', `${width}px`);
     root.style.setProperty('--app-vh', `${height}px`);
   };
 
   const schedule = () => {
-    if (pendingAnimationFrameId) return;
+    if (pendingAnimationFrameId !== null) return;
     pendingAnimationFrameId = window.requestAnimationFrame(apply);
   };
 
@@ -45,9 +46,9 @@ export function installViewportSizing() {
   visualViewport?.addEventListener('scroll', schedule, { passive: true });
 
   uninstallViewportSizing = () => {
-    if (pendingAnimationFrameId) {
+    if (pendingAnimationFrameId !== null) {
       window.cancelAnimationFrame(pendingAnimationFrameId);
-      pendingAnimationFrameId = 0;
+      pendingAnimationFrameId = null;
     }
     window.removeEventListener('resize', schedule);
     window.removeEventListener('orientationchange', schedule);
