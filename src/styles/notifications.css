@@ -254,6 +254,31 @@
 .toast--info    { --toast-color: var(--brand-cyan); }
 .toast--danger  { --toast-color: var(--brand-pink); }
 
+/* ---- Mobile: keep toasts + medals out of the play field ----
+   On a phone the 16:9 stage is small and letterboxed inside browser chrome,
+   so the default top-center toast stack quickly buries the action. Push the
+   stack below the HUD bar, slim each pill down, and let long text wrap to two
+   lines instead of forcing an extra-wide pill across the whole stage. */
+@media (hover: none) and (pointer: coarse) {
+  .toasts-layer {
+    top: clamp(66px, 14cqh, 96px);
+    gap: 6px;
+    max-width: min(86%, 360px);
+  }
+  .toast {
+    padding: 7px 13px 7px 9px;
+    gap: 9px;
+    white-space: normal;
+  }
+  .toast__icon { width: 18px; height: 18px; font-size: 11px; }
+  .toast__text b { font-size: var(--fs-small); margin-right: 4px; }
+
+  /* Medals slide in narrower so they don't span half the stage. */
+  .medals-layer { width: min(280px, 62%); top: clamp(62px, 13cqh, 96px); }
+  .medal { padding: 9px 14px 9px 9px; gap: 9px; }
+  .medal__icon { width: 36px; height: 36px; font-size: 18px; }
+}
+
 /* =====================================================================
    SCORE DELTA — a small "+250" that floats up next to the score on each
    pop. Lives inside the HUD's score-wrap so it positions relative to

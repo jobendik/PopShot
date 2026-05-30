@@ -170,8 +170,18 @@
 .hud__combo.is-mid     { color: var(--brand-yellow); border-color: var(--brand-yellow); box-shadow: 0 0 14px rgba(255,214,10,0.45); }
 .hud__combo.is-hot     { color: #ff36c4; border-color: #ff36c4; box-shadow: 0 0 18px rgba(255, 54, 196, 0.6); }
 
-/* ---- Right cluster: lives + level name ---- */
-.hud__right { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+/* ---- Right cluster: lives + level name ----
+   Reserve room on the right for the absolutely-positioned pause button
+   (44px + its inset) so the lives pips and level name never slide
+   underneath it. Without this the level name ("Sandcastles" etc.) collides
+   with the pause glyph on a narrow stage. */
+.hud__right {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-end;
+  padding-right: clamp(40px, 6cqi, 52px);
+}
 .hud__lives {
   display: flex; gap: 6px;
   padding: 4px 10px;
@@ -201,6 +211,9 @@
   text-shadow: 0 1px 2px rgba(0,0,0,0.6);
   text-align: right;
   max-width: 28cqi;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ---- Pause button (top-right, interactive) ---- */

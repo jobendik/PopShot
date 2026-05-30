@@ -508,6 +508,36 @@
 .menu.is-idle .menu__footer-hint    { opacity: 1; }
 
 /* =====================================================================
+   COMPACT MENU — small / phone-sized stage (#stage is a size container).
+   On a landscape phone the 16:9 stage is physically small, so the full
+   desktop menu (absolute profile card + brand strap + 4 CTAs + nav +
+   absolute footer) overflows and overlaps itself. Here we strip the menu
+   down to a clean, vertically-scrollable column: drop the decorative
+   strap, fold the absolute profile card + footer out of the way, and let
+   the CTA stack breathe within the now-scrollable .ui-screen.
+   ===================================================================== */
+@container (max-width: 760px) {
+  /* The absolute profile card overlaps the centred CTAs on a short stage.
+     Its stats live on the Profile / Stats screens, so hide it here to keep
+     the menu uncluttered and tap-friendly. */
+  .menu .menu__profile { display: none; }
+  /* Brand strap is pure decoration — reclaim its vertical space. */
+  .menu .menu__brand { display: none; }
+  /* Tighten the vertical rhythm so the core actions fit without scrolling
+     on most phones (and scroll cleanly when they don't). */
+  .menu .menu__title-wrap { margin-bottom: clamp(6px, 1.4cqi, 12px); }
+  .menu .menu__cta-stack { width: min(420px, 92cqi); gap: clamp(6px, 1.4cqi, 12px); }
+  .menu .menu__secondary { margin-top: clamp(8px, 1.8cqi, 14px); }
+  /* Footer joins the scroll flow instead of floating over the missions
+     block — fixes the three-line text pile-up at the bottom on phones. */
+  .menu .menu__footer {
+    position: static;
+    margin-top: clamp(8px, 1.6cqi, 14px);
+    bottom: auto;
+  }
+}
+
+/* =====================================================================
    MODE SELECT
    ===================================================================== */
 
