@@ -6,6 +6,7 @@ export default defineConfig({
   // repository name baked into the config.
   base: './',
   server: {
-    host: '127.0.0.1',
+    host: true,   // listen on 0.0.0.0 — exposes LAN address for phone / tablet access
+    port: 5173,
   },
 });
