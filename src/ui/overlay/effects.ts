@@ -21,6 +21,7 @@
  */
 
 import { W, H } from '../../constants';
+import { isTouchDevice } from '../../systems/input';
 
 let popupLayer: HTMLElement | null = null;
 let medalsLayer: HTMLElement | null = null;
@@ -35,8 +36,10 @@ const medalQueue: MedalSpec[] = [];
 let medalsActive = 0;
 let medalPumpTimer: number | null = null;
 
-// Soft cap on visible toasts so a burst doesn't carpet the screen.
-const TOAST_VISIBLE_MAX = 4;
+// Soft cap on visible toasts so a burst doesn't carpet the screen. Phones
+// have far less room (a 16:9 stage letterboxed inside browser chrome), so we
+// keep only two stacked at once there — more than that buries the play field.
+const TOAST_VISIBLE_MAX = isTouchDevice ? 2 : 4;
 
 export type MedalTier = 'bronze' | 'silver' | 'gold' | 'plat' | 'mythic';
 export type ToastKind  = 'success' | 'warn' | 'info' | 'danger';

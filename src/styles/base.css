@@ -158,9 +158,20 @@ body[data-state="victory"]      #game {
   display: flex;
   flex-direction: column;
   align-items: center;
+  /* `safe center` keeps content centred when it fits, but falls back to
+     start-alignment the moment it's taller than the stage — so the top of a
+     menu is never clipped and unreachable on a short landscape phone.
+     Paired with overflow-y: auto, overflowing screens scroll instead of
+     hiding their first rows behind the stage edge. The plain `center`
+     beforehand is the fallback for engines that don't parse the `safe`
+     overflow-alignment keyword. */
   justify-content: center;
+  justify-content: safe center;
   padding: clamp(12px, 3cqi, 32px);
   box-sizing: border-box;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   opacity: 0;
   visibility: hidden;
   transition: opacity var(--dur-base) var(--ease-out),

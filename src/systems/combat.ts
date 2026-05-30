@@ -89,7 +89,11 @@ export function popBall(game: Game, ball: Ball, source: any) {
       if (progress.completedNow) {
         FX.medal(progress.contract.title, progress.contract.label + ' complete', 'mythic', 'TITLE');
         FX.toast('success', 'TRICK CONTRACT', progress.contract.title + ' unlocked');
-      } else if (left <= 3 || progress.count % 5 === 0) {
+      } else if (left > 0 && (left <= 2 || progress.count % 10 === 0)) {
+        // Only surface a progress toast on real milestones — within 2 of the
+        // goal, or every 10th trick. `left > 0` guards against the contract
+        // re-firing "0 to …" forever once the target has already been met
+        // (recordTrick keeps counting past the target).
         FX.toast('info', progress.contract.label.toUpperCase(), left + ' to ' + progress.contract.title);
       }
     }
