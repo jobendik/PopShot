@@ -1181,7 +1181,15 @@
     width: min(620px, 94cqi);
     padding: clamp(10px, 1.8cqi, 14px);
     gap: clamp(5px, 1cqh, 8px);
-    overflow-y: hidden;
+    overflow-y: auto;
+  }
+
+  /* Hide non-essential blocks so action buttons stay visible without
+     scrolling on landscape phones with reduced viewport height. */
+  .gameover .result-almost,
+  .gameover [data-role="reason"],
+  .gameover [data-role="nba"] {
+    display: none;
   }
 
   .gameover .overlay-card__title.ui-heading--display {
@@ -1333,6 +1341,57 @@
   .gameover [data-role="continue"]:not([hidden]) {
     min-height: 34px;
     font-size: clamp(0.78rem, 1.55cqi, 0.98rem);
+  }
+}
+
+/* Ultra-compact: Android Chrome landscape with expanded address-bar can push
+   the stage height below 320px. Strip everything except title, score, and
+   action buttons so the player can always retry or return to the menu. */
+@container (max-height: 320px) {
+  .gameover .overlay-card {
+    padding: 6px 10px;
+    gap: 3px;
+    max-height: calc(100cqh - 8px);
+  }
+
+  .gameover .overlay-card__title.ui-heading--display {
+    font-size: clamp(1.1rem, 3.6cqi, 1.8rem);
+    line-height: 0.9;
+  }
+
+  .gameover .overlay-card__stats {
+    gap: 4px;
+    margin: 2px 0;
+  }
+
+  .gameover .ui-stat-row {
+    min-height: 32px;
+    padding: 3px 6px;
+    gap: 1px;
+  }
+
+  .gameover .ui-stat-row__label {
+    font-size: clamp(0.46rem, 0.85cqi, 0.54rem);
+  }
+
+  .gameover .ui-stat-row__value {
+    font-size: clamp(0.82rem, 1.6cqi, 1rem);
+  }
+
+  .gameover .overlay-card__actions {
+    gap: 4px;
+  }
+
+  .gameover .overlay-card__actions .ui-btn {
+    min-height: 30px;
+    padding: 4px 6px;
+    font-size: clamp(0.7rem, 1.2cqi, 0.84rem);
+    box-shadow: 0 2px 0 var(--ink), 0 4px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  .gameover .overlay-card__actions .ui-btn--cta {
+    font-size: clamp(0.84rem, 2.2cqi, 1.05rem);
+    padding: 5px 8px;
   }
 }
 
