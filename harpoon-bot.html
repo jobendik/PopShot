@@ -1,0 +1,865 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RIG-7 — Treaded Harpoon Bot · procedural character</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#070b14; --panel:#0c1322; --panel2:#0a1120;
+    --ink:#0a1832;
+    --cyan:#46e0ff; --cyan-d:#1f9ec2;
+    --gold:#ffce4a; --coral:#ff5d54;
+    --line:rgba(70,224,255,.16); --line2:rgba(70,224,255,.07);
+    --tx:#cfe6f2; --tx-dim:#6f8aa0;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:
+      radial-gradient(1200px 700px at 80% -10%, rgba(70,224,255,.10), transparent 60%),
+      radial-gradient(900px 600px at 0% 110%, rgba(255,93,84,.07), transparent 55%),
+      var(--bg);
+    color:var(--tx);
+    font-family:"Space Mono",monospace;
+    -webkit-font-smoothing:antialiased;
+    background-attachment:fixed;
+  }
+  /* faint blueprint grid over everything */
+  body::before{
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:0;
+    background-image:linear-gradient(var(--line2) 1px,transparent 1px),linear-gradient(90deg,var(--line2) 1px,transparent 1px);
+    background-size:34px 34px;
+    mask-image:radial-gradient(120% 120% at 50% 20%, #000 55%, transparent 100%);
+  }
+  .wrap{position:relative; z-index:1; max-width:1080px; margin:0 auto; padding:34px 20px 90px}
+
+  header{margin-bottom:26px}
+  .kicker{
+    font-size:11px; letter-spacing:.42em; text-transform:uppercase; color:var(--cyan-d);
+    display:flex; align-items:center; gap:10px;
+  }
+  .kicker::before{content:""; width:26px; height:2px; background:linear-gradient(90deg,var(--cyan),transparent)}
+  h1{
+    font-family:"Chakra Petch",sans-serif; font-weight:700;
+    font-size:clamp(30px,6vw,58px); line-height:.96; margin:.18em 0 .12em;
+    letter-spacing:.01em;
+  }
+  h1 .a{color:var(--cyan)} h1 .b{color:var(--coral)}
+  .lede{color:var(--tx-dim); max-width:62ch; font-size:13.5px; line-height:1.65}
+  .lede b{color:var(--tx)}
+
+  .panel{
+    position:relative; border:1px solid var(--line); border-radius:14px;
+    background:linear-gradient(180deg,var(--panel),var(--panel2));
+    margin-top:26px; overflow:hidden;
+    box-shadow:0 30px 70px -40px rgba(0,0,0,.9), inset 0 1px 0 rgba(255,255,255,.03);
+  }
+  .panel .corner{position:absolute; width:13px; height:13px; border:1px solid var(--cyan); opacity:.5}
+  .c1{top:9px;left:9px;border-right:0;border-bottom:0}
+  .c2{top:9px;right:9px;border-left:0;border-bottom:0}
+  .c3{bottom:9px;left:9px;border-right:0;border-top:0}
+  .c4{bottom:9px;right:9px;border-left:0;border-top:0}
+  .phead{
+    display:flex; align-items:baseline; gap:14px; flex-wrap:wrap;
+    padding:16px 20px 0;
+  }
+  .phead .id{font-family:"Chakra Petch",sans-serif; font-weight:700; font-size:15px; letter-spacing:.1em; color:var(--tx)}
+  .phead .id span{color:var(--cyan)}
+  .phead .note{font-size:11.5px; color:var(--tx-dim)}
+  canvas{display:block; width:100%; border-radius:0}
+  .stage{padding:14px 16px 4px}
+
+  .controls{display:flex; gap:9px; flex-wrap:wrap; padding:0 20px 18px}
+  button.btn{
+    font-family:"Chakra Petch",sans-serif; font-weight:600; letter-spacing:.06em;
+    font-size:12.5px; color:var(--tx); cursor:pointer;
+    background:rgba(70,224,255,.06); border:1px solid var(--line);
+    padding:9px 15px; border-radius:9px; transition:.14s;
+  }
+  button.btn:hover{border-color:var(--cyan); color:#fff; background:rgba(70,224,255,.13)}
+  button.btn.on{background:var(--cyan); border-color:var(--cyan); color:#04222c; box-shadow:0 0 24px -6px var(--cyan)}
+  button.btn.fire{border-color:rgba(255,93,84,.5)}
+  button.btn.fire:hover{border-color:var(--coral); background:rgba(255,93,84,.14)}
+  .spacer{flex:1}
+  .hud{font-size:11px; color:var(--tx-dim); align-self:center}
+  .hud b{color:var(--gold)}
+
+  .grid3{display:grid; grid-template-columns:1fr 1fr 1fr; gap:0}
+  .grid3 .cell{position:relative; border-right:1px solid var(--line2)}
+  .grid3 .cell:last-child{border-right:0}
+  .lab{position:absolute; top:10px; left:12px; font-size:10.5px; letter-spacing:.22em; text-transform:uppercase; color:var(--cyan-d); z-index:2}
+  @media(max-width:720px){ .grid3{grid-template-columns:1fr} .grid3 .cell{border-right:0;border-bottom:1px solid var(--line2)} }
+
+  .notes{font-size:13px; line-height:1.7; color:var(--tx-dim)}
+  .notes h3{font-family:"Chakra Petch",sans-serif; color:var(--tx); letter-spacing:.06em; font-size:15px; margin:0 0 6px}
+  .notes code{background:rgba(70,224,255,.08); border:1px solid var(--line); padding:1px 6px; border-radius:5px; color:var(--cyan); font-size:12px}
+  .notes b{color:var(--tx)}
+  .notes ul{margin:8px 0 0; padding-left:18px}
+  .notes li{margin:5px 0}
+  .pad{padding:18px 22px 22px}
+  .foot{margin-top:30px; font-size:11px; color:var(--tx-dim); text-align:center; letter-spacing:.08em}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="kicker">procedural character · canvas 2d · drop-in</div>
+    <h1>RIG&#8209;7 — the <span class="a">harpoon</span> <span class="b">tread&#8209;bot</span></h1>
+    <p class="lede">A legless redesign of the player, built to be <b>loved</b>. One big <b>expressive eye</b> is the whole face — it scans around when idle, narrows with determination when firing, and breaks into a happy squint when it pops a bubble. A fluttering <b>coral scarf</b> gives it a signature and trails in the wind. Underneath, the animation is honest physics: a <b>planted tread that rolls</b>, a <b>hull that rocks on suspension</b>, a <b>cannon that recoils on a real spring</b>, and a <b>lagging antenna</b> for follow-through. Every shape is drawn in code with one light source, and a single function — <code>drawBot()</code> — runs every state.</p>
+  </header>
+
+  <!-- ===================== HERO INSPECTOR ===================== -->
+  <section class="panel">
+    <i class="corner c1"></i><i class="corner c2"></i><i class="corner c3"></i><i class="corner c4"></i>
+    <div class="phead">
+      <div class="id">UNIT <span>RIG-7</span> · inspector</div>
+      <div class="note">drive it, fire it, swap the skin</div>
+    </div>
+    <div class="stage"><canvas id="hero"></canvas></div>
+    <div class="controls">
+      <button class="btn on" data-h="idle">Idle</button>
+      <button class="btn" data-h="rollR">Roll &#8594;</button>
+      <button class="btn" data-h="rollL">&#8592; Roll</button>
+      <button class="btn fire" data-h="fire">Fire &#8593;</button>
+      <button class="btn" data-h="happy">React &#9829;</button>
+      <button class="btn" data-h="auto">Auto demo</button>
+      <div class="spacer"></div>
+      <button class="btn" id="skinBtn">Skin: P1</button>
+    </div>
+  </section>
+
+  <!-- ===================== ANIMATION BREAKDOWN ===================== -->
+  <section class="panel">
+    <i class="corner c1"></i><i class="corner c2"></i><i class="corner c3"></i><i class="corner c4"></i>
+    <div class="phead">
+      <div class="id">animation <span>states</span></div>
+      <div class="note">the three things the bot ever does — side by side, looping</div>
+    </div>
+    <div class="grid3">
+      <div class="cell"><div class="lab">idle · breathe</div><canvas id="s_idle"></canvas></div>
+      <div class="cell"><div class="lab">roll · tread</div><canvas id="s_roll"></canvas></div>
+      <div class="cell"><div class="lab">fire · recoil</div><canvas id="s_fire"></canvas></div>
+    </div>
+  </section>
+
+  <!-- ===================== LIVE GAMEPLAY ===================== -->
+  <section class="panel">
+    <i class="corner c1"></i><i class="corner c2"></i><i class="corner c3"></i><i class="corner c4"></i>
+    <div class="phead">
+      <div class="id">in&#8209;game <span>context</span></div>
+      <div class="note">real beach palette · bot rolls under the nearest bubble and harpoons it</div>
+    </div>
+    <div class="stage"><canvas id="demo"></canvas></div>
+    <div class="controls">
+      <button class="btn fire" id="dFire">Manual fire</button>
+      <button class="btn on" id="dAuto">Auto-aim: ON</button>
+      <button class="btn" id="dAdd">+ Bubble</button>
+      <div class="spacer"></div>
+      <div class="hud">popped <b id="score">0</b></div>
+    </div>
+  </section>
+
+  <!-- ===================== PORT NOTES ===================== -->
+  <section class="panel">
+    <i class="corner c1"></i><i class="corner c2"></i><i class="corner c3"></i><i class="corner c4"></i>
+    <div class="pad notes">
+      <h3>Porting into player.ts</h3>
+      <p>Replace the body of <code>Player.draw()</code> with a single <code>drawBot(ctx, this.x, GROUND_Y, pose)</code> call. Build <code>pose</code> straight from the state you already track — no new systems:</p>
+      <ul>
+        <li><code>facing</code> &larr; your <code>facing</code> (only flips the head/eye + dust; the turret stays vertical).</li>
+        <li><code>vx</code> &larr; your <code>vx</code> (signed). Drives the suspension lean and the dust kick.</li>
+        <li><code>dist</code> &larr; accumulate <code>dist += vx*dt</code> (<b>signed</b>, not <code>abs</code> — that's what makes the wheels and tread reverse when moving left). This alone spins the wheels and scrolls the tread at exactly the right rate and direction.</li>
+        <li><code>fireT</code> &larr; a tiny timer set to <code>0</code> in <code>tryShoot()</code>, advanced by <code>dt</code> each frame; pass <code>-1</code> when not firing. The whole anticipation&rarr;launch&rarr;spring recovery is a pure function of it.</li>
+        <li><code>pal</code> &larr; <code>equippedPalette().colors</code>. The P2 teal recolor (and any future skin) just works — the skin toggle above proves it.</li>
+        <li><code>cheerT</code> (optional) &larr; set to <code>0</code> on a successful pop and advance by <code>dt</code>; pass <code>-1</code> otherwise. Drives the happy-eye squint and a little hop — free emotional payoff every time the player scores.</li>
+      </ul>
+      <p><code>drawBot()</code> <b>returns the muzzle point</b> <code>{x,y}</code> at the barrel tip, so spawn your <code>Projectile</code> there and the spear lines up with no seam. The in-flight harpoon reuses your existing <code>drawSpearhead</code> helper from <code>projectile.ts</code> (included here, unmodified).</p>
+    </div>
+  </section>
+
+  <div class="foot">all graphics procedural · no images, no sprites · single light source from upper-left</div>
+</div>
+
+<script>
+/* ============================================================
+   shared helpers
+============================================================ */
+const INK = '#0a1832';
+const TAU = Math.PI*2;
+
+// roundRect: always override so it BEGINS a fresh subpath.
+// (The native/spec roundRect only *appends* to the current path, which makes a
+//  later fill() also fill whatever stale path was left over — a real gotcha.)
+{
+  CanvasRenderingContext2D.prototype.roundRect=function(x,y,w,h,r){
+    if(typeof r==='number') r=[r,r,r,r];
+    this.beginPath();
+    this.moveTo(x+r[0],y);
+    this.arcTo(x+w,y,x+w,y+h,r[1]);
+    this.arcTo(x+w,y+h,x,y+h,r[2]);
+    this.arcTo(x,y+h,x,y,r[3]);
+    this.arcTo(x,y,x+w,y,r[0]);
+    this.closePath(); return this;
+  };
+}
+
+const clamp=(v,a,b)=>v<a?a:v>b?b:v;
+const lerp=(a,b,t)=>a+(b-a)*t;
+const easeInOutCubic=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+const easeOutCubic=t=>1-Math.pow(1-t,3);
+const easeOutBack=t=>{const c=1.7;return 1+ (c+1)*Math.pow(t-1,3)+c*Math.pow(t-1,2);};
+// damped spring settle: starts at 1, oscillates to 0
+const settle=k=>Math.cos(k*Math.PI*2.3)*Math.exp(-k*4.2);
+
+function shade(hex,amt){
+  let c=hex.replace('#','');
+  if(c.length===3)c=c.split('').map(x=>x+x).join('');
+  let r=parseInt(c.slice(0,2),16),g=parseInt(c.slice(2,4),16),b=parseInt(c.slice(4,6),16);
+  r=clamp(r+amt,0,255);g=clamp(g+amt,0,255);b=clamp(b+amt,0,255);
+  return '#'+[r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
+}
+function circle(ctx,x,y,r){ctx.beginPath();ctx.arc(x,y,r,0,TAU);}
+function ellipse(ctx,x,y,rx,ry){ctx.beginPath();ctx.ellipse(x,y,rx,ry,0,0,TAU);}
+
+function setup(canvas,cssH){
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  const cssW=canvas.parentElement.clientWidth;
+  canvas.style.height=cssH+'px';
+  canvas.width=Math.round(cssW*dpr);
+  canvas.height=Math.round(cssH*dpr);
+  const ctx=canvas.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  return {ctx,w:cssW,h:cssH,dpr,el:canvas};
+}
+
+// the barbed steel + gold spearhead — matches projectile.ts exactly
+function drawSpearhead(ctx,x,tipY){
+  ctx.save(); ctx.lineJoin='round';
+  ctx.fillStyle='#e9eef5'; ctx.strokeStyle=INK; ctx.lineWidth=2;
+  ctx.beginPath();
+  ctx.moveTo(x,tipY-10);ctx.lineTo(x+5,tipY-1);ctx.lineTo(x+7,tipY+8);
+  ctx.lineTo(x+2,tipY+3);ctx.lineTo(x+2,tipY+1);ctx.lineTo(x-2,tipY+1);
+  ctx.lineTo(x-2,tipY+3);ctx.lineTo(x-7,tipY+8);ctx.lineTo(x-5,tipY-1);
+  ctx.closePath();ctx.fill();ctx.stroke();
+  ctx.fillStyle='#ffd60a';
+  ctx.beginPath();ctx.moveTo(x,tipY-8);ctx.lineTo(x+2.4,tipY-2);ctx.lineTo(x-2.4,tipY-2);ctx.closePath();ctx.fill();
+  ctx.restore();
+}
+
+/* ============================================================
+   PALETTES — drive recolor exactly like equippedPalette().colors
+============================================================ */
+const P1={ body:'#3a7bd5', bodyDark:'#234f97', bodyHi:'#86b6f3',
+           boot:'#222a38', bootHi:'#48566b',
+           hat:'#ffce4a', hatHi:'#ffe49b', hatDark:'#cf9a1e',
+           accent:'#ff5d54', core:'#46e0ff' };
+const P2={ body:'#16b39a', bodyDark:'#0c7e6b', bodyHi:'#6cead2',
+           boot:'#1d2b2c', bootHi:'#3a5650',
+           hat:'#ffce4a', hatHi:'#ffe49b', hatDark:'#cf9a1e',
+           accent:'#ff8a3d', core:'#9bffe9' };
+
+/* ============================================================
+   THE CHARACTER  —  drawBot(ctx, x, groundY, pose) -> {x,y} muzzle
+
+   pose = {
+     facing:  +1 / -1     head + dust direction (turret stays vertical)
+     t:       seconds     global clock, for idle life
+     vx:      px/s signed  suspension lean + dust
+     dist:    px           accumulated travel -> wheel spin + tread scroll
+     fireT:   seconds      time since fire began, or <0 for "at rest"
+     pal:     palette
+     scale:   number       default 1
+   }
+============================================================ */
+function fireEnv(ft){
+  // anticipation -> launch -> spring recovery, as a pure function of time
+  const A=0.11, B=0.19, C=0.60;
+  if(ft==null||ft<0||ft>C) return {charge:0,recoil:0,pitch:0,flash:0,smoke:0,launched:false,t:ft};
+  let charge=0,recoil=0,pitch=0,flash=0,smoke=0,launched=false;
+  if(ft<A){                                   // wind up: core charges, slight pre-load
+    const k=ft/A;
+    charge=easeInOutCubic(k);
+    recoil=-2.5*easeOutCubic(k);              // turret eases UP a hair (loading)
+    pitch =-0.012*k;                          // nose dips forward slightly
+  } else if(ft<B){                            // launch: hard kick down + rock back
+    const k=(ft-A)/(B-A);
+    charge=1; launched=true;
+    recoil=lerp(-2.5,9,easeOutCubic(k));      // + = turret driven DOWN into hull
+    pitch =lerp(-0.012,0.085,easeOutCubic(k));// rock backward, front lifts
+    flash =1-Math.abs(k-0.30)*1.6; flash=clamp(flash,0,1);
+    smoke =k;
+  } else {                                    // recovery: damped spring overshoot
+    const k=(ft-B)/(C-B);
+    recoil=9*settle(k);
+    pitch =0.085*settle(k);
+    charge=(1-k)*0.35;
+    smoke =(1-k)*0.9;
+  }
+  return {charge,recoil,pitch,flash,smoke,launched,t:ft};
+}
+
+// where a point sits along the looping tread band (for scrolling lugs)
+function treadPoint(s,sep,wy,Rt){
+  const arc=Math.PI*Rt, P=2*sep+2*arc, hs=sep/2;
+  s=((s%P)+P)%P;
+  if(s<sep)            return {x:-hs+s,            y:wy-Rt, nx:0, ny:-1};
+  s-=sep;
+  if(s<arc){ const a=-Math.PI/2+(s/arc)*Math.PI;  return {x:hs+Math.cos(a)*Rt, y:wy+Math.sin(a)*Rt, nx:Math.cos(a), ny:Math.sin(a)}; }
+  s-=arc;
+  if(s<sep)            return {x:hs-s,             y:wy+Rt, nx:0, ny:1};
+  s-=sep;
+  const a=Math.PI/2+(s/arc)*Math.PI;              return {x:-hs+Math.cos(a)*Rt, y:wy+Math.sin(a)*Rt, nx:Math.cos(a), ny:Math.sin(a)};
+}
+
+function drawWheel(ctx,cx,cy,r,ang,pal){
+  // tire
+  ctx.lineWidth=2; ctx.strokeStyle=INK;
+  ctx.fillStyle=shade(pal.boot,-6); circle(ctx,cx,cy,r); ctx.fill(); ctx.stroke();
+  // hub
+  const g=ctx.createRadialGradient(cx-r*.3,cy-r*.3,1,cx,cy,r*.74);
+  g.addColorStop(0,pal.bootHi); g.addColorStop(1,shade(pal.boot,6));
+  ctx.fillStyle=g; circle(ctx,cx,cy,r*.66); ctx.fill();
+  // spokes (rotate -> reads as rolling)
+  ctx.save(); ctx.translate(cx,cy); ctx.rotate(ang);
+  ctx.strokeStyle=INK; ctx.lineWidth=2.4; ctx.lineCap='round';
+  for(let i=0;i<5;i++){ ctx.rotate(TAU/5);
+    ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,-r*.55); ctx.stroke(); }
+  ctx.restore();
+  // axle cap + spec
+  ctx.fillStyle=shade(pal.bootHi,30); circle(ctx,cx,cy,r*.2); ctx.fill();
+  ctx.fillStyle='rgba(255,255,255,.5)'; circle(ctx,cx-r*.22,cy-r*.22,r*.12); ctx.fill();
+}
+
+/* ---- the expressive face: one big eye, fully clear, that emotes ---- */
+function eyeFace(ctx, ex, ey, R, pal, e){
+  ctx.save();
+  // recessed socket
+  ctx.fillStyle=shade(pal.bodyDark,-30); ctx.strokeStyle=INK; ctx.lineWidth=2.8;
+  circle(ctx,ex,ey,R+1.6); ctx.fill(); ctx.stroke();
+  // glowing lens base
+  const lg=ctx.createRadialGradient(ex-R*.32,ey-R*.34,1,ex,ey,R+1);
+  lg.addColorStop(0,'#f4ffff'); lg.addColorStop(.42,pal.core); lg.addColorStop(1,shade(pal.core,-80));
+  ctx.fillStyle=lg; circle(ctx,ex,ey,R); ctx.fill();
+  // clip to the lens for iris + lids + sparkle
+  ctx.save(); circle(ctx,ex,ey,R); ctx.clip();
+    // iris (looks around)
+    const ix=ex+e.look*R*0.34, iy=ey+(e.lookY||0)*R*0.24;
+    const ir=R*0.60*e.iris;
+    ctx.fillStyle='rgba(5,15,32,.96)'; circle(ctx,ix,iy,ir); ctx.fill();
+    ctx.fillStyle=pal.core; circle(ctx,ix,iy,ir*0.5); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.95)'; circle(ctx,ix,iy,ir*0.2); ctx.fill();
+    // eyelids — body colour ellipses sliding in from top & bottom = expression
+    const lid=shade(pal.body,-4);
+    ctx.fillStyle=lid;
+    const lidE=(cx,cy,rx,ry,rot)=>{ctx.save();ctx.translate(cx,cy);ctx.rotate(rot);ctx.beginPath();ctx.ellipse(0,0,rx,ry,0,0,TAU);ctx.fill();ctx.restore();};
+    const ry=R*1.3, rx=R*1.7;
+    // UP/LO = how far each lid edge sits from centre (in R units); bigger = more open
+    const UP = 0.60 - e.squint*0.45 - (1-e.openV)*0.35 - e.blink*0.72;
+    const LO = 0.60 - e.blink*0.72 - e.smile*1.0;        // smile raises lower lid -> happy crescent
+    lidE(ex, (ey - UP*R) - ry, rx, ry, e.browTilt);      // upper (bottom edge = ey-UP*R)
+    lidE(ex, (ey + LO*R) + ry, rx, ry, 0);               // lower (top edge = ey+LO*R)
+    // sparkles (cuteness) sit on the glass, on top of lids
+    ctx.fillStyle='rgba(255,255,255,.96)';
+    circle(ctx, ex - R*0.33 + e.look*R*0.12, ey - R*0.36, R*0.21); ctx.fill();
+    ctx.fillStyle='rgba(255,255,255,.72)';
+    circle(ctx, ex + R*0.22, ey + R*0.2, R*0.1); ctx.fill();
+  ctx.restore();
+  // crisp rim
+  ctx.strokeStyle=INK; ctx.lineWidth=2.8; circle(ctx,ex,ey,R); ctx.stroke();
+  // expressive gold brow
+  ctx.save(); ctx.translate(ex, ey - R - 2.2); ctx.rotate(e.browTilt*0.7);
+  ctx.fillStyle=pal.hat; ctx.strokeStyle=INK; ctx.lineWidth=2.2;
+  ctx.roundRect(-R*0.96,-3.4,R*1.92,5,2.5); ctx.fill(); ctx.stroke();
+  ctx.fillStyle='rgba(255,255,255,.45)'; ctx.fillRect(-R*0.82,-2.4,R*1.45,1.4);
+  ctx.restore();
+  ctx.restore();
+}
+
+/* ---- signature coral scarf: knot + two fluttering tails (callback to the explorer) ---- */
+function scarfTails(ctx, kx, ky, pal, facing, t, energy){
+  const dir=-facing;
+  const wind=clamp(energy,0,1);        // 0 at rest -> hangs straight down; 1 -> streams back
+  ctx.save(); ctx.lineJoin='round'; ctx.strokeStyle=INK;
+  for(let s=1;s>=0;s--){               // far tail first, near tail on top
+    const len=26+s*9, w0=8.5-s*2.4, ph=t*6.2+s*1.7;
+    const N=9, top=[], bot=[], mid=[];
+    for(let i=0;i<=N;i++){
+      const u=i/N;
+      const back = dir*len*u*(0.28 + wind*0.95);          // leans back as it moves
+      const down = len*u*(0.78 - wind*0.46);              // gravity: hangs down, less when streaming
+      const sway = Math.sin(t*1.5 + u*1.8) * 2.3*(1-wind) * u;  // gentle idle pendulum
+      const flutter = Math.sin(ph + u*4.2) * energy*(7+s*2.5) * u;
+      const cx = kx + back + sway;
+      const cy = ky + down + flutter*0.7;
+      const ww = w0*(1-u*0.8);
+      top.push([cx,cy-ww*0.5]); bot.push([cx,cy+ww*0.5]); mid.push([cx,cy]);
+    }
+    ctx.beginPath(); ctx.moveTo(top[0][0],top[0][1]);
+    for(let i=1;i<=N;i++) ctx.lineTo(top[i][0],top[i][1]);
+    for(let i=N;i>=0;i--) ctx.lineTo(bot[i][0],bot[i][1]);
+    ctx.closePath();
+    ctx.fillStyle=s?shade(pal.accent,-26):pal.accent; ctx.lineWidth=2; ctx.fill(); ctx.stroke();
+    if(s===0){                         // light streak so it reads as cloth
+      ctx.strokeStyle=shade(pal.accent,42); ctx.lineWidth=1.6;
+      ctx.beginPath(); for(let i=0;i<=N;i++) (i?ctx.lineTo:ctx.moveTo).call(ctx,mid[i][0]+1,mid[i][1]);
+      ctx.stroke(); ctx.strokeStyle=INK;
+    }
+  }
+  ctx.restore();
+}
+
+function drawBot(ctx,x,groundY,pose){
+  const pal=pose.pal||P1, t=pose.t||0, S=pose.scale||1;
+  const facing=pose.facing||1, vx=pose.vx||0, dist=pose.dist||0;
+  const env=fireEnv(pose.fireT);
+  const speed=Math.abs(vx);
+
+  // ---- emotion ----
+  let cheer=0, hop=0;
+  if(pose.cheerT!=null && pose.cheerT>=0 && pose.cheerT<0.95){
+    cheer=Math.sin(clamp(pose.cheerT/0.95,0,1)*Math.PI);
+    hop=Math.max(0,Math.sin(pose.cheerT*15))*Math.exp(-pose.cheerT*4)*4;
+  }
+  let look=Math.sin(t*0.8)*0.55, lookY=Math.sin(t*0.6+1)*0.16;
+  if(speed>10) look=clamp(Math.sign(vx)*0.72,-0.85,0.85);
+  let openV=1, squint=0, smile=0, iris=1, browTilt=0;
+  if(env.charge>0){ const c=env.charge;
+    squint=c*0.55; iris=lerp(1,0.62,c); browTilt=-0.30*c; openV=lerp(1,0.8,c);
+    look=lerp(look,0,clamp((pose.fireT||0)/0.09,0,1)); lookY=lerp(lookY,-0.18,c); }
+  if(cheer>0){ smile=Math.max(smile,cheer); iris=lerp(iris,1.12,cheer); browTilt=lerp(browTilt,0.12,cheer); lookY=lerp(lookY,-0.08,cheer); }
+  let cyc=(t%4.6), blink=(cyc>4.25 && env.charge<0.1 && cheer<0.1)?Math.sin((cyc-4.25)/0.32*Math.PI):0;
+  const expr={look,lookY,openV,squint,smile,iris,browTilt,blink};
+
+  // --- geometry ---
+  const R=18, sep=30, Rt=R+3, wy=-R;
+  const susBase=-6, idleBob=Math.sin(t*2.1)*1.4;
+  const sus=susBase - env.recoil*0.55 + idleBob;
+  const pitch=env.pitch + clamp(-vx*0.00018,-0.05,0.05);
+
+  ctx.save();
+  ctx.translate(x,groundY); ctx.scale(S,S);
+  ctx.lineJoin='round'; ctx.lineCap='round';
+
+  /* shadow */
+  ctx.save(); ctx.fillStyle='rgba(8,16,30,.22)'; ellipse(ctx,0,2,sep/2+R+4,7); ctx.fill(); ctx.restore();
+
+  /* rolling dust */
+  if(speed>4){
+    const dir=Math.sign(vx)||facing; ctx.fillStyle='rgba(245,235,210,.5)';
+    for(let i=0;i<4;i++){ const p=((t*4+i*0.37)%1), r=2+p*5, dx=-dir*(sep/2+R+p*22), dy=-2-p*8*Math.sin(p*3);
+      ctx.globalAlpha=(1-p)*0.5; circle(ctx,dx,dy,r); ctx.fill(); }
+    ctx.globalAlpha=1;
+  }
+
+  /* ============ TREAD UNIT ============ */
+  ctx.strokeStyle=INK; ctx.lineWidth=2.5; ctx.fillStyle=shade(pal.boot,-16);
+  ctx.beginPath();
+  ctx.moveTo(-sep/2,wy-Rt); ctx.lineTo(sep/2,wy-Rt);
+  ctx.arc(sep/2,wy,Rt,-Math.PI/2,Math.PI/2); ctx.lineTo(-sep/2,wy+Rt);
+  ctx.arc(-sep/2,wy,Rt,Math.PI/2,Math.PI*1.5); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle=shade(pal.boot,8);
+  ctx.beginPath();
+  ctx.moveTo(-sep/2,wy-R+1); ctx.lineTo(sep/2,wy-R+1);
+  ctx.arc(sep/2,wy,R-1,-Math.PI/2,Math.PI/2); ctx.lineTo(-sep/2,wy+R-1);
+  ctx.arc(-sep/2,wy,R-1,Math.PI/2,Math.PI*1.5); ctx.closePath(); ctx.fill();
+  const ang=dist/R;
+  drawWheel(ctx,-7,wy+2,7,ang,pal); drawWheel(ctx,7,wy+2,7,ang,pal);
+  drawWheel(ctx,-sep/2,wy,R,ang,pal); drawWheel(ctx,sep/2,wy,R,ang,pal);
+  const L=8.5, P=2*sep+2*Math.PI*Rt, n=Math.floor(P/L);
+  ctx.lineWidth=2.6;
+  for(let i=0;i<n;i++){ const pt=treadPoint(i*L+dist,sep,wy,Rt), lit=pt.ny<-0.2;
+    ctx.strokeStyle=lit?shade(pal.boot,40):shade(pal.boot,-30);
+    ctx.beginPath(); ctx.moveTo(pt.x-pt.nx*1.6,pt.y-pt.ny*1.6); ctx.lineTo(pt.x+pt.nx*2.4,pt.y+pt.ny*2.4); ctx.stroke(); }
+  ctx.strokeStyle='rgba(255,255,255,.18)'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(-sep/2+2,wy-Rt+1); ctx.lineTo(sep/2-2,wy-Rt+1); ctx.stroke();
+
+  /* ============ HULL group (rides + rocks + hops) ============ */
+  ctx.save();
+  ctx.translate(0, wy+sus-hop);
+  ctx.rotate(pitch);
+
+  // --- main hull (round + friendly) ---
+  const hw=29, hh=31, hy=-22;
+  ctx.strokeStyle=INK; ctx.lineWidth=2.8;
+  const bg=ctx.createLinearGradient(-hw,hy-6,hw,hy+hh);
+  bg.addColorStop(0,pal.bodyHi); bg.addColorStop(.5,pal.body); bg.addColorStop(1,pal.bodyDark);
+  ctx.fillStyle=bg; ctx.roundRect(-hw,hy,hw*2,hh,[16,16,13,13]); ctx.fill(); ctx.stroke();
+  ctx.save(); ctx.roundRect(-hw,hy,hw*2,hh,[16,16,13,13]); ctx.clip();
+    ctx.fillStyle='rgba(255,255,255,.16)';
+    ctx.beginPath(); ctx.moveTo(-hw,hy); ctx.lineTo(hw,hy); ctx.lineTo(hw-12,hy+8); ctx.lineTo(-hw+8,hy+8); ctx.fill();
+    ctx.fillStyle='rgba(10,24,50,.18)'; ctx.fillRect(-hw,hy+hh*0.66,hw*2,hh*0.4);
+  ctx.restore();
+  // side rivets
+  ctx.fillStyle='rgba(10,24,50,.5)';
+  [-hw+7,hw-7].forEach(px=>{circle(ctx,px,hy+hh-7,1.6);ctx.fill();});
+
+  // little reactor light low on the chest
+  const corePulse=0.5+0.5*Math.sin(t*3.2), coreBright=clamp(corePulse*0.6+env.charge,0,1);
+  const cy0=hy+hh-8;
+  const cg=ctx.createRadialGradient(0,cy0,0,0,cy0,8+coreBright*4);
+  cg.addColorStop(0,pal.core); cg.addColorStop(.4,pal.core); cg.addColorStop(1,'rgba(70,224,255,0)');
+  ctx.globalAlpha=0.3+coreBright*0.5; ctx.fillStyle=cg; circle(ctx,0,cy0,8+coreBright*4); ctx.fill(); ctx.globalAlpha=1;
+  ctx.fillStyle=pal.core; ctx.strokeStyle=INK; ctx.lineWidth=2; circle(ctx,0,cy0,3); ctx.fill(); ctx.stroke();
+  ctx.fillStyle='rgba(255,255,255,.9)'; circle(ctx,-1,cy0-1,1); ctx.fill();
+
+  // ===== THE FACE — big, centred, unobstructed =====
+  eyeFace(ctx, 0, hy+hh*0.46, 11, pal, expr);
+
+  // cheek bolts (tiny charm)
+  ctx.fillStyle='rgba(10,24,50,.4)';
+  circle(ctx,-hw+8,hy+hh*0.5,1.4); ctx.fill(); circle(ctx,hw-8,hy+hh*0.5,1.4); ctx.fill();
+
+  // ===== SIGNATURE SCARF — knotted at the rear flank; hangs under gravity, streams when moving =====
+  const scarfEnergy=clamp(speed/120,0,1)*1.3 + env.recoil*0.07 + cheer*0.95;
+  scarfTails(ctx, -facing*13, hy+9, pal, facing, t, scarfEnergy);
+  ctx.fillStyle=pal.accent; ctx.strokeStyle=INK; ctx.lineWidth=2.2;
+  circle(ctx, -facing*13, hy+9, 4.5); ctx.fill(); ctx.stroke();
+  ctx.fillStyle=shade(pal.accent,30); circle(ctx, -facing*13-1.4, hy+7.6, 1.8); ctx.fill();
+
+  // ===== HARPOON CANNON — top-mounted, vertical, clear of the face =====
+  const barL=22, turY=hy+env.recoil*0.6;
+  ctx.save(); ctx.translate(0,turY);
+  // mount cradle (sits at the top, above the brow)
+  ctx.fillStyle=pal.bodyDark; ctx.strokeStyle=INK; ctx.lineWidth=2.4;
+  ctx.roundRect(-9,-7,18,11,4); ctx.fill(); ctx.stroke();
+  // cable spool
+  ctx.fillStyle=shade(pal.boot,20); circle(ctx,-11,1,4.5); ctx.fill(); ctx.stroke();
+  for(let i=2;i<5;i++){ctx.strokeStyle='rgba(255,206,74,.6)';ctx.lineWidth=1.1;ctx.beginPath();ctx.arc(-11,1,i,0,TAU);ctx.stroke();}
+  // barrel
+  const barg=ctx.createLinearGradient(-5,0,5,0);
+  barg.addColorStop(0,shade(pal.bodyDark,-6)); barg.addColorStop(.5,pal.bodyHi); barg.addColorStop(1,pal.bodyDark);
+  ctx.fillStyle=barg; ctx.strokeStyle=INK; ctx.lineWidth=2.4;
+  ctx.roundRect(-5.5,-barL-5,11,barL+8,[5,5,3,3]); ctx.fill(); ctx.stroke();
+  // charge glow inside
+  const ch=clamp(env.charge,0,1);
+  if(ch>0.02){ ctx.save(); ctx.roundRect(-5.5,-barL-5,11,barL+8,[5,5,3,3]); ctx.clip();
+    const gg=ctx.createLinearGradient(0,-barL-3,0,0); gg.addColorStop(0,'rgba(255,255,255,'+(0.9*ch)+')'); gg.addColorStop(1,'rgba(70,224,255,0)');
+    ctx.fillStyle=gg; ctx.fillRect(-6,-barL-5,12,barL+8); ctx.restore(); }
+  // gold muzzle ring
+  ctx.fillStyle=pal.hat; ctx.strokeStyle=INK; ctx.lineWidth=2.4;
+  ctx.roundRect(-7,-barL-9,14,6,3); ctx.fill(); ctx.stroke();
+  ctx.fillStyle='rgba(255,255,255,.5)'; ctx.fillRect(-5,-barL-8,10,1.4);
+  // muzzle flash
+  if(env.flash>0.02){ const fy=-barL-9;
+    ctx.save(); ctx.globalCompositeOperation='lighter';
+    const fg=ctx.createRadialGradient(0,fy,0,0,fy,22*env.flash);
+    fg.addColorStop(0,'rgba(255,255,255,'+env.flash+')'); fg.addColorStop(.4,'rgba(255,206,74,'+(0.8*env.flash)+')'); fg.addColorStop(1,'rgba(255,93,84,0)');
+    ctx.fillStyle=fg; circle(ctx,0,fy,22*env.flash); ctx.fill();
+    ctx.strokeStyle='rgba(255,240,180,'+env.flash+')'; ctx.lineWidth=2;
+    for(let i=0;i<6;i++){const a=-Math.PI/2+(i-2.5)*0.42; ctx.beginPath(); ctx.moveTo(0,fy); ctx.lineTo(Math.cos(a)*16*env.flash,fy+Math.sin(a)*16*env.flash); ctx.stroke();}
+    ctx.restore(); }
+  // smoke
+  if(env.smoke>0.05){ ctx.fillStyle='rgba(210,220,230,'+(0.4*env.smoke)+')'; const sy=-barL-11-env.smoke*8;
+    circle(ctx,3*Math.sin(t*9),sy,3+env.smoke*4); ctx.fill(); circle(ctx,-4,sy+3,2+env.smoke*3); ctx.fill(); }
+  ctx.restore(); // cannon
+
+  // ===== SMALL SENSOR ANTENNA — drawn AFTER the cannon so it's never hidden by the coil =====
+  const sway=clamp(-vx*0.0016,-0.45,0.45)+env.recoil*0.02+cheer*Math.sin(t*22)*0.12;  // still at rest
+  ctx.save(); ctx.translate(-facing*20, hy+6);
+  ctx.fillStyle=pal.bodyDark; ctx.strokeStyle=INK; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.ellipse(0,0,3.2,2.2,0,0,TAU); ctx.fill(); ctx.stroke();
+  const tx=Math.sin(sway)*6, ty=-13+Math.cos(sway)*1.5, mx=tx*0.4, my=-7;
+  ctx.lineCap='round';
+  ctx.strokeStyle=INK; ctx.lineWidth=4;
+  ctx.beginPath(); ctx.moveTo(0,-1); ctx.quadraticCurveTo(mx,my,tx,ty); ctx.stroke();
+  ctx.strokeStyle=shade(pal.bodyHi,8); ctx.lineWidth=1.8;
+  ctx.beginPath(); ctx.moveTo(0,-1); ctx.quadraticCurveTo(mx,my,tx,ty); ctx.stroke();
+  ctx.fillStyle=shade(pal.core,-30); ctx.strokeStyle=INK; ctx.lineWidth=1.6;
+  circle(ctx,tx,ty,2.2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle='rgba(255,255,255,.6)'; circle(ctx,tx-0.7,ty-0.7,0.8); ctx.fill();
+  ctx.restore();
+
+  const muzzleLocalY=(wy+sus-hop)+(turY-barL-9);
+  ctx.restore(); // hull group
+  ctx.restore(); // bot
+
+  return { x:x, y:groundY+muzzleLocalY*S };
+}
+
+/* ============================================================
+   backdrops
+============================================================ */
+function labBg(ctx,w,h){
+  ctx.fillStyle='#070d18'; ctx.fillRect(0,0,w,h);
+  const vg=ctx.createRadialGradient(w*0.5,h*0.32,20,w*0.5,h*0.5,h*0.95);
+  vg.addColorStop(0,'rgba(70,224,255,.07)'); vg.addColorStop(1,'rgba(7,13,24,0)');
+  ctx.fillStyle=vg; ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle='rgba(70,224,255,.06)'; ctx.lineWidth=1;
+  for(let gx=0;gx<w;gx+=30){ctx.beginPath();ctx.moveTo(gx,0);ctx.lineTo(gx,h);ctx.stroke();}
+  for(let gy=0;gy<h;gy+=30){ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(w,gy);ctx.stroke();}
+  // ground rule
+  const gy=h-30;
+  ctx.strokeStyle='rgba(70,224,255,.35)'; ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(w,gy);ctx.stroke();
+  return gy;
+}
+function beachBg(ctx,w,h){
+  const g=ctx.createLinearGradient(0,0,0,h);
+  g.addColorStop(0,'#56cbf9');g.addColorStop(.62,'#bfe9f5');g.addColorStop(1,'#ffe0b3');
+  ctx.fillStyle=g;ctx.fillRect(0,0,w,h);
+  const sg=ctx.createRadialGradient(w*0.84,h*0.2,4,w*0.84,h*0.2,90);
+  sg.addColorStop(0,'rgba(255,245,177,.85)');sg.addColorStop(1,'rgba(255,245,177,0)');
+  ctx.fillStyle=sg; ellipse(ctx,w*0.84,h*0.2,90,90); ctx.fill();
+  ctx.fillStyle='#fff5b1'; circle(ctx,w*0.84,h*0.2,24); ctx.fill();
+  const gy=h-44;
+  const fg=ctx.createLinearGradient(0,gy,0,h);
+  fg.addColorStop(0,'#f6d68d');fg.addColorStop(1,'#caa468');
+  ctx.fillStyle=fg;ctx.fillRect(0,gy,w,h-gy);
+  ctx.fillStyle='rgba(255,255,255,.3)';ctx.fillRect(0,gy,w,3);
+  return gy;
+}
+function drawBubble(ctx,x,y,r,hue){
+  const g=ctx.createRadialGradient(x-r*.35,y-r*.35,r*.1,x,y,r);
+  g.addColorStop(0,'rgba(255,255,255,.95)');
+  g.addColorStop(.25,hue);
+  g.addColorStop(1,shade(hue,-50));
+  ctx.fillStyle=g; ctx.strokeStyle=INK; ctx.lineWidth=2.5;
+  circle(ctx,x,y,r); ctx.fill(); ctx.stroke();
+  ctx.fillStyle='rgba(255,255,255,.85)'; ellipse(ctx,x-r*.34,y-r*.4,r*.22,r*.14); ctx.fill();
+}
+
+/* ============================================================
+   SCENE 1 — hero inspector
+============================================================ */
+const hero=(()=>{
+  let s=setup(document.getElementById('hero'),360);
+  let mode='idle', skin=P1, t=0;
+  let vx=0, dist=0, fireT=-1, fireCd=0, facing=1, autoTmr=0, cheerT=-1;
+  return {
+    setMode(m){ if(m==='happy'){ cheerT=0; } else { mode=m; } },
+    setSkin(p){ skin=p; },
+    resize(){ s=setup(s.el,360); },
+    update(dt){
+      t+=dt;
+      let targetVx=0, fire=false;
+      if(mode==='rollR'){ targetVx=130; facing=1; }
+      else if(mode==='rollL'){ targetVx=-130; facing=-1; }
+      else if(mode==='fire'){ if(fireCd<=0) fire=true; }
+      else if(mode==='auto'){
+        autoTmr+=dt; const c=autoTmr%7.4;
+        if(c<1.3) targetVx=0;
+        else if(c<2.7){ targetVx=135; facing=1; }
+        else if(c<2.95){ if(fireCd<=0) fire=true; }
+        else if(c<4.4){ targetVx=-135; facing=-1; }
+        else if(c<4.7){ if(cheerT<0) cheerT=0; }
+        else targetVx=0;
+      }
+      vx=lerp(vx,targetVx,dt*6); if(Math.abs(vx)<2)vx=0;
+      dist+=vx*dt;   // signed: wheels + tread roll the correct way both directions
+      if(fire){ fireT=0; fireCd=0.95; }
+      if(fireT>=0){ fireT+=dt; if(fireT>0.62) fireT=-1; }
+      if(fireCd>0) fireCd-=dt;
+      if(cheerT>=0){ cheerT+=dt; if(cheerT>0.95) cheerT=-1; }
+    },
+    draw(){
+      const {ctx,w,h}=s;
+      const gy=labBg(ctx,w,h);
+      const mu=drawBot(ctx,w*0.5,gy,{facing,t,vx,dist,fireT,cheerT,pal:skin,scale:2.4});
+      if(fireT>0.17){
+        const k=clamp((fireT-0.17)/0.40,0,1);
+        const topY=mu.y - k*(gy-30);
+        ctx.strokeStyle='#dfe7f0'; ctx.lineWidth=3; ctx.lineCap='round';
+        ctx.beginPath(); ctx.moveTo(mu.x,mu.y); ctx.lineTo(mu.x,topY); ctx.stroke();
+        ctx.strokeStyle='rgba(70,224,255,.5)'; ctx.lineWidth=1.4;
+        ctx.beginPath(); ctx.moveTo(mu.x,mu.y); ctx.lineTo(mu.x,topY); ctx.stroke();
+        drawSpearhead(ctx,mu.x,topY);
+      }
+    }
+  };
+})();
+
+/* ============================================================
+   SCENE 2 — animation breakdown (3 locked states)
+============================================================ */
+function makeState(id, kind){
+  let s=setup(document.getElementById(id),230);
+  let t=0,dist=0,fireT=0;
+  function update(dt){
+    t+=dt;
+    if(kind==='roll') dist+=120*dt;
+    if(kind==='fire'){ fireT+=dt; if(fireT>1.5) fireT=0; }
+  }
+  function draw(){
+    const {ctx,w,h}=s;
+    const gy=labBg(ctx,w,h);
+    let pose={facing:1,t,vx:0,dist:0,fireT:-1,pal:P1,scale:1.7};
+    if(kind==='roll'){pose.vx=120;pose.dist=dist;}
+    if(kind==='fire'){pose.fireT = fireT<0.62?fireT:-1;}
+    const mu=drawBot(ctx,w*0.5,gy,pose);
+    if(kind==='fire' && fireT>0.17 && fireT<0.62){
+      const k=clamp((fireT-0.17)/0.4,0,1);
+      const topY=mu.y-k*(gy-26);
+      ctx.strokeStyle='#dfe7f0';ctx.lineWidth=2.4;
+      ctx.beginPath();ctx.moveTo(mu.x,mu.y);ctx.lineTo(mu.x,topY);ctx.stroke();
+      drawSpearhead(ctx,mu.x,topY);
+    }
+  }
+  return {update,draw,resize(){s=setup(s.el,230);}};
+}
+const stIdle=makeState('s_idle','idle');
+const stRoll=makeState('s_roll','roll');
+const stFire=makeState('s_fire','fire');
+
+/* ============================================================
+   SCENE 3 — live gameplay demo
+============================================================ */
+const demo=(()=>{
+  let s=setup(document.getElementById('demo'),360);
+  let t=0;
+  let botX, vx=0, dist=0, fireT=-1, fireCd=0, facing=1, cheerT=-1;
+  let auto=true, score=0;
+  const hues=['#ff5d54','#ffce4a','#46e0ff','#7ed957','#c77dff'];
+  let bubbles=[], harpoon=null, fx=[];
+  function spawn(x){
+    const r=22+Math.random()*14;
+    bubbles.push({x:x??(60+Math.random()*(s.w-120)), y:80+Math.random()*60,
+      vy:0, vx:(Math.random()<.5?-1:1)*(28+Math.random()*22), r, hue:hues[(Math.random()*hues.length)|0]});
+  }
+  function reset(){ botX=s.w*0.5; bubbles=[]; harpoon=null; fx=[]; for(let i=0;i<3;i++)spawn(); }
+  reset();
+  function nearest(){
+    let best=null,bd=1e9;
+    for(const b of bubbles){const d=Math.abs(b.x-botX); if(d<bd){bd=d;best=b;}}
+    return best;
+  }
+  return {
+    resize(){ s=setup(s.el,360); reset(); },
+    toggleAuto(){auto=!auto;return auto;},
+    addBubble(){spawn();},
+    manualFire(){ if(fireCd<=0 && !harpoon) this._wantFire=true; },
+    update(dt){
+      t+=dt; dt=Math.min(dt,0.033);
+      const gy=s.h-44;
+      // bubbles bounce
+      for(const b of bubbles){
+        b.x+=b.vx*dt; b.vy+=520*dt; b.y+=b.vy*dt;
+        if(b.y+b.r>gy){b.y=gy-b.r; b.vy=-Math.sqrt(2*520*(gy-b.r-60));}
+        if(b.x-b.r<8){b.x=8+b.r;b.vx*=-1;} if(b.x+b.r>s.w-8){b.x=s.w-8-b.r;b.vx*=-1;}
+      }
+      // aim
+      const tgt=nearest();
+      let targetVx=0;
+      if(auto && tgt && !harpoon){
+        const dx=tgt.x-botX;
+        if(Math.abs(dx)>6){ targetVx=clamp(dx*4,-150,150); facing=Math.sign(dx)||facing; }
+        else if(fireCd<=0){ this._wantFire=true; }
+      }
+      vx=lerp(vx,targetVx,dt*7); if(Math.abs(vx)<2)vx=0;
+      botX+=vx*dt; botX=clamp(botX,40,s.w-40); dist+=vx*dt;
+      // fire trigger
+      if(this._wantFire && fireCd<=0 && !harpoon){ fireT=0; fireCd=0.7;
+        // muzzle resolved after draw; spawn harpoon on launch frame instead
+      }
+      this._wantFire=false;
+      if(fireT>=0){ fireT+=dt;
+        if(fireT>0.18 && !harpoon && drawBot.__mu){ harpoon={x:drawBot.__mu.x,y:drawBot.__mu.y}; }
+        if(fireT>0.62)fireT=-1;
+      }
+      if(fireCd>0)fireCd-=dt;
+      // harpoon travel
+      if(harpoon){
+        harpoon.y-=620*dt;
+        // hit test
+        for(let i=bubbles.length-1;i>=0;i--){
+          const b=bubbles[i];
+          if(Math.abs(b.x-harpoon.x)<b.r && harpoon.y<b.y+b.r){
+            // pop
+            score++; document.getElementById('score').textContent=score;
+            cheerT=0;   // celebrate!
+            for(let p=0;p<14;p++){const a=Math.random()*TAU,sp=40+Math.random()*120;
+              fx.push({x:b.x,y:b.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp-40,life:1,hue:b.hue});}
+            fx.push({ring:true,x:b.x,y:b.y,r:b.r,life:1});
+            if(b.r>20){ // split
+              for(let k=0;k<2;k++) bubbles.push({x:b.x,y:b.y,vy:-120,vx:(k?1:-1)*70,r:b.r*0.62,hue:b.hue});
+            }
+            bubbles.splice(i,1);
+            harpoon=null;
+            break;
+          }
+        }
+        if(harpoon && harpoon.y<54) harpoon=null;
+      }
+      // fx
+      for(let i=fx.length-1;i>=0;i--){const f=fx[i];
+        if(f.ring){f.r+=160*dt;f.life-=dt*2.2;}
+        else{f.vy+=420*dt;f.x+=f.vx*dt;f.y+=f.vy*dt;f.life-=dt*1.6;}
+        if(f.life<=0)fx.splice(i,1);
+      }
+      if(bubbles.length===0) spawn();
+      if(cheerT>=0){ cheerT+=dt; if(cheerT>0.95) cheerT=-1; }
+    },
+    draw(){
+      const {ctx,w,h}=s;
+      const gy=beachBg(ctx,w,h);
+      // bubbles
+      for(const b of bubbles) drawBubble(ctx,b.x,b.y,b.r,b.hue);
+      // bot
+      const mu=drawBot(ctx,botX,gy,{facing,t,vx,dist,fireT,cheerT,pal:P1,scale:1.9});
+      drawBot.__mu=mu;
+      // harpoon
+      if(harpoon){
+        ctx.strokeStyle='#e9eef5';ctx.lineWidth=3;ctx.lineCap='round';
+        ctx.beginPath();ctx.moveTo(harpoon.x,mu.y);ctx.lineTo(harpoon.x,harpoon.y);ctx.stroke();
+        ctx.strokeStyle='rgba(70,224,255,.45)';ctx.lineWidth=1.3;
+        ctx.beginPath();ctx.moveTo(harpoon.x,mu.y);ctx.lineTo(harpoon.x,harpoon.y);ctx.stroke();
+        drawSpearhead(ctx,harpoon.x,harpoon.y);
+      }
+      // fx
+      for(const f of fx){
+        if(f.ring){
+          ctx.globalAlpha=clamp(f.life,0,1);ctx.strokeStyle='#fff';ctx.lineWidth=3;
+          circle(ctx,f.x,f.y,f.r);ctx.stroke();ctx.globalAlpha=1;
+        } else {
+          ctx.globalAlpha=clamp(f.life,0,1);ctx.fillStyle=f.hue;
+          circle(ctx,f.x,f.y,3*f.life+1);ctx.fill();ctx.globalAlpha=1;
+        }
+      }
+    }
+  };
+})();
+
+/* ============================================================
+   wiring + master loop
+============================================================ */
+document.querySelectorAll('[data-h]').forEach(b=>{
+  b.addEventListener('click',()=>{
+    if(b.dataset.h==='happy'){ hero.setMode('happy'); return; }   // momentary reaction
+    document.querySelectorAll('[data-h]').forEach(x=>{ if(x.dataset.h!=='happy') x.classList.remove('on'); });
+    b.classList.add('on'); hero.setMode(b.dataset.h);
+  });
+});
+let usingP2=false;
+document.getElementById('skinBtn').addEventListener('click',e=>{
+  usingP2=!usingP2; hero.setSkin(usingP2?P2:P1);
+  e.target.textContent='Skin: '+(usingP2?'P2':'P1'); e.target.classList.toggle('on',usingP2);
+});
+document.getElementById('dFire').addEventListener('click',()=>demo.manualFire());
+document.getElementById('dAuto').addEventListener('click',e=>{
+  const on=demo.toggleAuto(); e.target.textContent='Auto-aim: '+(on?'ON':'OFF'); e.target.classList.toggle('on',on);
+});
+document.getElementById('dAdd').addEventListener('click',()=>demo.addBubble());
+
+let last=performance.now();
+function loop(now){
+  let dt=(now-last)/1000; last=now; dt=Math.min(dt,0.05);
+  hero.update(dt); hero.draw();
+  stIdle.update(dt); stIdle.draw();
+  stRoll.update(dt); stRoll.draw();
+  stFire.update(dt); stFire.draw();
+  demo.update(dt); demo.draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+let rt;
+window.addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{
+  hero.resize(); stIdle.resize(); stRoll.resize(); stFire.resize(); demo.resize();
+},120);});
+</script>
+</body>
+</html>

@@ -5,7 +5,14 @@ import { equippedPalette } from '../systems/titles';
 import { clamp } from '../utils';
 import { roundRect } from '../rendering/canvas';
 import { Projectile } from './projectile';
+import { drawBot, ROBOT_P2_PALETTE, ROBOT_MUZZLE_LOCAL_Y } from './robot';
 import type { Game } from '../game';
+
+// Visual scale of the treaded robot relative to its native size. Tuned so the
+// bot reads at roughly the same footprint as the old humanoid (~46px tall).
+// Gameplay (hitbox, walls, muzzle math) all derive from this — bump it to make
+// the robot bigger/smaller without touching anything else.
+const ROBOT_SCALE = 0.68;
 
 // ============================ PLAYER ================================
 export class Player {
@@ -31,6 +38,18 @@ export class Player {
   /** Seconds remaining where weapons are disabled (after touching a Bird /
    *  Ball-Fish). 0 means weapons are normal. */
   weaponDisabled: number;
+  // --- Robot character animation state (drives drawBot) ---
+  /** Free-running clock for idle life (eye scan, breathe, tread shimmer). */
+  animT: number;
+  /** Signed accumulated travel — spins the wheels + scrolls the tread the
+   *  correct way in both directions. */
+  dist: number;
+  /** Seconds since the cannon began firing, or <0 for "at rest". Drives the
+   *  whole anticipation -> launch -> spring-recovery recoil. */
+  fireT: number;
+  /** Seconds since the last successful pop, or <0 for none. Drives the happy
+   *  eye-squint + little hop. */
+  cheerT: number;
   constructor(x, y, isP2 = false) {
     this.x = x; this.y = y;
     this.w = 30; this.h = 46;
@@ -56,6 +75,10 @@ export class Player {
     // Anim
     this.bob = 0;
     this.walkAnim = 0;
+    this.animT = 0;
+    this.dist = 0;
+    this.fireT = -1;
+    this.cheerT = -1;
   }
 
   /** Returns the smaller-than-visual hitbox for forgiving collisions. */
@@ -63,10 +86,18 @@ export class Player {
     return { x: this.x - 10, y: this.y - this.h + 6, w: 20, h: this.h - 8 };
   }
 
-  /** Player muzzle position - top of the gun barrel */
+  /** Player muzzle position - tip of the harpoon cannon. The robot's cannon is
+   *  top-mounted and vertical (centered on x), so shots leave from the centre
+   *  rather than offset by facing. Matches drawBot's returned muzzle at rest. */
   getMuzzle() {
-    return { x: this.x + this.facing * 4, y: this.y - this.h + 8 };
+    return { x: this.x, y: this.y + ROBOT_MUZZLE_LOCAL_Y * ROBOT_SCALE };
   }
+
+  // Legacy humanoid muzzle — kept for reference alongside the commented-out
+  // humanoid draw code below.
+  // getMuzzle() {
+  //   return { x: this.x + this.facing * 4, y: this.y - this.h + 8 };
+  // }
 
   update(dt, game) {
     if (this.dead) return;
@@ -101,6 +132,11 @@ export class Player {
       this.bob = Math.sin(this.walkAnim) * 0.6;
     }
 
+    // Robot animation clocks. dist is SIGNED so the tread + wheels roll the
+    // correct way when moving left vs right.
+    this.animT += dt;
+    this.dist += this.vx * dt;
+
     // Lava damage
     for (const h of game.hazards) {
       if (h.type === 'lava' && !h.dead && this.x > h.x && this.x < h.x + h.w && Math.abs(this.y - h.y) < 28) {
@@ -121,8 +157,22 @@ export class Player {
 
     // Shooting (blocked entirely while a Bird/Ball-Fish has disabled weapons)
     this.flameActive = false;
-    if (shoot && this.weaponDisabled <= 0) this.tryShoot(game);
+    if (shoot && this.weaponDisabled <= 0) {
+      const cdBefore = this.shotCooldown;
+      this.tryShoot(game);
+      // A shot actually left the barrel iff tryShoot bumped the cooldown back
+      // up — that's the cue to (re)start the cannon recoil animation.
+      if (this.shotCooldown > cdBefore) this.fireT = 0;
+    }
+
+    // Advance the cannon recoil envelope + the cheer reaction.
+    if (this.fireT >= 0) { this.fireT += dt; if (this.fireT > 0.62) this.fireT = -1; }
+    if (this.cheerT >= 0) { this.cheerT += dt; if (this.cheerT > 0.95) this.cheerT = -1; }
   }
+
+  /** Trigger the happy eye-squint + hop. Call on a successful pop for free
+   *  emotional payoff (optional — safe to never call). */
+  cheer() { this.cheerT = 0; }
 
   tryShoot(game) {
     const m = this.getMuzzle();
@@ -262,6 +312,25 @@ export class Player {
     const x = this.x, y = this.y + this.bob;
     // Invuln flicker
     if (this.invuln > 0 && Math.floor(this.invuln * 20) % 2 === 0) { return; }
+
+    // ===== ROBOT CHARACTER (RIG-7) — replaces the old humanoid explorer =====
+    // P1 uses the equipped palette; P2 gets the dedicated green skin. drawBot
+    // fills in the bootHi/core fields the saved palette doesn't carry, so the
+    // skin toggle and every unlockable palette keep working unchanged. The bot
+    // draws its own shadow + harpoon cannon; the status overlays (shield / stun
+    // / flame) below remain live and sit on top of it.
+    drawBot(ctx, this.x, this.y, {
+      facing: this.facing, t: this.animT, vx: this.vx, dist: this.dist,
+      fireT: this.fireT, cheerT: this.cheerT,
+      pal: this.isP2 ? ROBOT_P2_PALETTE : equippedPalette().colors,
+      scale: ROBOT_SCALE,
+    });
+
+    /* ===== LEGACY HUMANOID DRAW — kept for reference, NO LONGER DRAWN =====
+       The procedural explorer character that RIG-7 replaced. Left fully intact
+       (along with the commented-out legacy getMuzzle() near the top of the
+       class) so it can be restored later. Everything between here and
+       "END LEGACY HUMANOID" is disabled.
 
     // Shadow
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
@@ -425,22 +494,23 @@ export class Player {
     }
     ctx.stroke();
     ctx.restore();
+    ===== END LEGACY HUMANOID ===== */
 
-    // Shield aura
+    // Shield aura — sized to wrap the wider robot hull.
     if (this.shield) {
       ctx.strokeStyle = `hsla(${(performance.now() / 6) % 360}, 100%, 70%, 0.8)`;
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(x, y - 22, 26, 0, Math.PI * 2);
+      ctx.arc(x, y - 26, 30, 0, Math.PI * 2);
       ctx.stroke();
     }
 
-    // Bird-stun: spinning star indicator above head while weapons are locked.
-    // Telegraphs to the player exactly why their shots aren't coming out.
+    // Bird-stun: spinning star indicator above the cannon while weapons are
+    // locked. Telegraphs to the player exactly why their shots aren't coming out.
     if (this.weaponDisabled > 0) {
       const t = performance.now() / 200;
       ctx.save();
-      ctx.translate(x, y - 56);
+      ctx.translate(x, y - 60);
       ctx.rotate(t);
       ctx.fillStyle = '#ffd60a';
       ctx.strokeStyle = '#5b3500';
