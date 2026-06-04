@@ -3,7 +3,7 @@
 
    Borrows the structural patterns from INSPIRATION/ricochet.html
    (medals, toasts, score-bump, combo ring, vignette, chromatic
-   aberration, profile card) and renders them in Bubble Breaker's
+   aberration, profile card) and renders them in PopShot's
    bright family-arcade aesthetic — gold/coral/pink/cyan/mint accents,
    Bowlby One + Inter typography, biome-aware tinting.
 
@@ -167,7 +167,7 @@
   letter-spacing: 0.04em;
 }
 
-/* Tier color mapping — uses Bubble Breaker brand palette. */
+/* Tier color mapping — uses PopShot brand palette. */
 .medal--bronze { --medal-color: #c47238; }
 .medal--silver { --medal-color: #d1d6e0; }
 .medal--gold   { --medal-color: var(--brand-yellow); }
@@ -587,7 +587,7 @@
 /* =====================================================================
    PROFILE CARD (main menu) — surfaces lifetime stats + current title +
    marksman tier so returning players see their progress at a glance.
-   No coins/gems (Bubble Breaker has no f2p economy); the equivalent
+   No coins/gems (PopShot has no f2p economy); the equivalent
    "currency" slots show real progression stats.
    ===================================================================== */
 

@@ -190,13 +190,9 @@ export function renderMainMenu(game: Game) {
   ctx.textAlign = 'center';
   ctx.lineWidth = 6; ctx.strokeStyle = '#0a1832';
   const yT = 130;
-  ctx.strokeText('BUBBLE BREAKER', W/2, yT);
+  ctx.strokeText('POPSHOT', W/2, yT);
   ctx.fillStyle = '#ffd60a';
-  ctx.fillText('BUBBLE BREAKER', W/2, yT);
-  ctx.font = 'bold 32px sans-serif';
-  ctx.strokeText('A D V E N T U R E', W/2, yT + 40);
-  ctx.fillStyle = '#fff';
-  ctx.fillText('A D V E N T U R E', W/2, yT + 40);
+  ctx.fillText('POPSHOT', W/2, yT);
 
   // Three demo balls bouncing at different rates and altitudes so the menu
   // is never visually static. Each is "behind" the menu chrome thanks to

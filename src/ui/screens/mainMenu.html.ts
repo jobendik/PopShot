@@ -98,7 +98,7 @@ export function buildMainMenu(game: Game): HTMLElement {
   // --- Profile card (top-left) ---
   // Replaces the legacy title-chip with a richer card showing avatar +
   // name + current title + marksman rank progress + 3 key stats. Inspired
-  // by ricochet.html's profile card, adapted to Bubble Breaker's actual
+  // by ricochet.html's profile card, adapted to PopShot's actual
   // progression model (lifetime pops drives the rank, no coins/gems).
   const profile = document.createElement('div');
   profile.className = 'menu__profile';
@@ -195,8 +195,7 @@ export function buildMainMenu(game: Game): HTMLElement {
   const titleWrap = document.createElement('div');
   titleWrap.className = 'menu__title-wrap';
   titleWrap.innerHTML = `
-    <h1 class="menu__title">Bubble Breaker</h1>
-    <p class="menu__subtitle">Adventure</p>
+    <h1 class="menu__title">PopShot</h1>
   `;
   root.appendChild(titleWrap);
 
