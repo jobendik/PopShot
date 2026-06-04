@@ -486,6 +486,36 @@
   outline: none;
 }
 
+/* Fullscreen toggle — same glass chip as the sound button, parked one slot to
+   its left (44px button + ~8px gap). */
+.menu__fullscreen {
+  position: absolute;
+  top: clamp(8px, 1.6cqi, 18px);
+  right: calc(clamp(8px, 1.6cqi, 18px) + 52px);
+  z-index: 4;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  line-height: 1;
+  color: var(--paper);
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 2px solid color-mix(in srgb, var(--paper) 30%, transparent);
+  cursor: pointer;
+  transition: background-color var(--dur-fast), color var(--dur-fast), border-color var(--dur-fast), transform var(--dur-fast);
+}
+.menu__fullscreen:hover, .menu__fullscreen:focus-visible {
+  background: var(--brand-yellow);
+  color: var(--ink);
+  border-color: var(--ink);
+  transform: scale(1.08);
+  outline: none;
+}
+
 .menu__footer {
   position: absolute;
   left: 0; right: 0; bottom: clamp(8px, 1.6cqi, 18px);
