@@ -7,7 +7,7 @@
 // single upper-left light source.
 //
 // Entry point: drawBot(ctx, x, groundY, pose) -> {x, y} muzzle point.
-// Ported from the standalone reference in /harpoon-bot.html.
+// Originally ported from a standalone harpoon-bot.html prototype (since removed).
 
 import { clamp } from '../utils';
 
