@@ -126,7 +126,7 @@ export function buildControls(): HTMLElement {
 export function buildCredits(): HTMLElement {
   const root = buildShell('Credits', State.CREDITS);
   const rows: Row[] = [
-    { label: 'Game design', value: 'Bubble Breaker Team' },
+    { label: 'Game design', value: 'PopShot Team' },
     { label: 'Code',        value: 'TypeScript + Vite' },
     { label: 'Audio',       value: 'Real-asset SFX + WebAudio synth' },
     { label: 'Inspired by', value: 'Pang / Buster Bros' },

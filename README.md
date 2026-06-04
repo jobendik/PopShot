@@ -1,4 +1,4 @@
-# Bubble Breaker Adventure
+# PopShot
 
 A TypeScript + Vite + HTML5 Canvas arcade game in the Pang / Buster Bros tradition. Pop, split, dodge, survive. Procedural art, procedural audio, no runtime dependencies, CrazyGames-ready.
 

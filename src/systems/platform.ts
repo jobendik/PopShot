@@ -33,6 +33,9 @@ interface CrazyGamesSDK {
     loadingStart?(): void;
     loadingStop?(): void;
     setGameContext?(ctx: Record<string, unknown>): void;
+    settings?: { muteAudio?: boolean };
+    addSettingsChangeListener?(cb: (settings: { muteAudio?: boolean }) => void): void;
+    removeSettingsChangeListener?(cb: (settings: { muteAudio?: boolean }) => void): void;
   };
   ad?: {
     requestAd?(type: AdType, callbacks?: AdCallbacks): void;
@@ -139,6 +142,29 @@ export const Platform = {
     if (!this.ready) return;
     const g = safeGet('game');
     try { g?.setGameContext?.(ctx); } catch { /* swallow */ }
+  },
+
+  /** Whether the CrazyGames player has muted the game from the platform UI
+   *  (SDK `game.settings.muteAudio`). False when unavailable / no SDK. Force it
+   *  locally for testing with the `?muteAudio=true` query param. */
+  isPlatformMuted(): boolean {
+    if (!this.ready) return false;
+    const g = safeGet('game');
+    try { return !!g?.settings?.muteAudio; } catch { return false; }
+  },
+
+  /** Subscribe to CrazyGames settings changes, invoking `cb` with the current
+   *  muteAudio value whenever the player toggles it on the site. Best-effort
+   *  no-op when the SDK or the listener API is absent. */
+  onMuteAudioChange(cb: (muted: boolean) => void): void {
+    if (!this.ready) return;
+    const g = safeGet('game');
+    if (!g?.addSettingsChangeListener) return;
+    try {
+      g.addSettingsChangeListener((settings) => {
+        try { cb(!!settings?.muteAudio); } catch { /* swallow */ }
+      });
+    } catch { /* swallow */ }
   },
 
   /** Player has just entered active gameplay. Mutes ads during the run. */

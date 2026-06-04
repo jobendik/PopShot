@@ -212,7 +212,7 @@ export function renderCredits(game: Game) {
   ctx.fillText('CREDITS', W/2, 100);
   ctx.font = '20px sans-serif';
   const lines = [
-    'Bubble Breaker Adventure',
+    'PopShot',
     'A TypeScript HTML5 Canvas arcade game.',
     'Inspired by the Pang / Buster Bros series.',
     '',

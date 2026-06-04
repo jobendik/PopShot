@@ -175,7 +175,7 @@ export function updateDailyResult(game: Game) {
 /** Build the shareable text. Centralized so Copy and Tweet stay in sync. */
 function buildShareText(game: Game): string {
   const pick = game.daily ?? pickDailyChallenge();
-  return `I scored ${game.dailyResultScore.toLocaleString()} on today's Bubble Breaker daily — modifier: ${pick.modifierLabel}. Beat me!`;
+  return `I scored ${game.dailyResultScore.toLocaleString()} on today's PopShot daily — modifier: ${pick.modifierLabel}. Beat me!`;
 }
 
 /** Open an X (Twitter) share intent in a new tab. Works without SDKs/login. */

@@ -113,6 +113,11 @@ export const AudioSys = {
    *  cleanly when the ad finishes. CrazyGames requires the game to be silent
    *  while ad audio plays — failing to do so is a top rejection cause. */
   ducked: false,
+  /** Set when the CrazyGames player mutes the game from the platform UI
+   *  (SDK `game.settings.muteAudio`). Independent from `muted` (the in-game
+   *  toggle) and `ducked` (ads) so the three never clobber each other. Required
+   *  to honestly tick "supports muting audio through the SDK". */
+  cgMuted: false,
   init() {
     if (this.ctx) return;
     const AC = window.AudioContext || window.webkitAudioContext;
@@ -139,13 +144,27 @@ export const AudioSys = {
    *  CrazyGames rejects games that play audio over their ad slot. */
   duckForAd() {
     this.ducked = true;
-    try { this.ctx?.suspend?.(); } catch { /* swallow */ }
-    this._musicSync();
+    this._applyContextState();
   },
   /** Restore audio after an ad finishes (success or error). */
   unduckForAd() {
     this.ducked = false;
-    try { this.ctx?.resume?.(); } catch { /* swallow */ }
+    this._applyContextState();
+  },
+  /** Platform mute: the CrazyGames player toggled audio from the site UI.
+   *  Routes through the same silencing path as an ad duck but on its own flag,
+   *  so an ad ending can't un-mute a platform-muted player and vice-versa. */
+  setPlatformMute(on: boolean) {
+    this.cgMuted = on;
+    this._applyContextState();
+  },
+  /** Suspend the audio context whenever an ad OR the platform wants silence,
+   *  resume only when neither does, then reconcile music to match. */
+  _applyContextState() {
+    try {
+      if (this.ducked || this.cgMuted) this.ctx?.suspend?.();
+      else this.ctx?.resume?.();
+    } catch { /* swallow */ }
     this._musicSync();
   },
 
@@ -181,7 +200,7 @@ export const AudioSys = {
    *  init/toggle/duck/unduck so the same gate covers every transition. */
   _musicSync() {
     if (!_musicEl || !_musicCurrent) return;
-    const shouldPlay = !this.muted && !this.ducked;
+    const shouldPlay = !this.muted && !this.ducked && !this.cgMuted;
     if (shouldPlay) {
       if (_musicEl.paused) _musicEl.play().catch(() => { /* needs user gesture, init will retry */ });
     } else {
@@ -193,7 +212,7 @@ export const AudioSys = {
    *  fallback); false if not loaded yet (caller plays procedural; asset starts
    *  downloading in the background and is ready for next call). */
   _playId(id: string, vol = 1): boolean {
-    if (this.muted || !this.ctx || !this.master) return false;
+    if (this.muted || this.cgMuted || !this.ctx || !this.master) return false;
     const buf = _buffers.get(id);
     if (!buf) {
       _loadOne(this.ctx, id);
@@ -212,7 +231,7 @@ export const AudioSys = {
    *  loaded next in rotation. Avoids the mechanical sameness of replaying one
    *  file during rapid clears. */
   _playVariant(prefix: string, vol = 1): boolean {
-    if (this.muted || !this.ctx) return false;
+    if (this.muted || this.cgMuted || !this.ctx) return false;
     const c = _variantCounters.get(prefix) ?? 0;
     for (let i = 0; i < 3; i++) {
       const idx = ((c + i) % 3) + 1;
@@ -229,7 +248,7 @@ export const AudioSys = {
   // ---------- Procedural primitives (kept as fallback) ----------
   /** Generic envelope tone */
   beep(freq, dur, type = 'square', vol = 0.4, slide = 0) {
-    if (this.muted || !this.ctx) return;
+    if (this.muted || this.cgMuted || !this.ctx) return;
     const t = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
@@ -244,7 +263,7 @@ export const AudioSys = {
   },
   /** Noise burst for explosions, etc. */
   noise(dur, freq, vol = 0.3) {
-    if (this.muted || !this.ctx) return;
+    if (this.muted || this.cgMuted || !this.ctx) return;
     const t = this.ctx.currentTime;
     const bufSize = Math.floor(this.ctx.sampleRate * dur);
     const buf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);

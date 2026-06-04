@@ -78,6 +78,11 @@ Platform.init().then(() => {
   // remaining boot work that's hopefully sub-frame.
   Platform.loadingStart();
   Platform.loadingStop();
+  // Honor the CrazyGames platform mute toggle (SDK game.settings.muteAudio):
+  // apply its current value, then track it live so muting from the site UI
+  // silences the game immediately. Independent from the in-game mute button.
+  AudioSys.setPlatformMute(Platform.isPlatformMuted());
+  Platform.onMuteAudioChange((muted) => AudioSys.setPlatformMute(muted));
   // Best-effort: pull the player's CrazyGames username so the welcome-back
   // banner can address them by name. No-op for guests / offline / no SDK.
   Platform.getUsername().then(name => { if (name) setUsername(name); });
