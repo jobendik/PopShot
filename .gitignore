@@ -6,6 +6,12 @@ vite-dev.err
 .DS_Store
 .smoke/
 
+# WAV masters for the SFX. The shipped tree (public/sfx) carries only the
+# compressed .ogg/.mp3 produced by tools/compress-audio.mjs; the lossless WAV
+# sources live here locally and are NOT committed (~170 MB). If we want them
+# versioned, track them via Git LFS or keep them in external/cloud storage.
+assets-src/
+
 # Source audio libraries — extracted into public/sfx & public/music; the
 # archives/working copies themselves don't belong in the repo.
 /Bubble Circuit.mp3

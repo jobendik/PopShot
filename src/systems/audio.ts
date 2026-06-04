@@ -18,6 +18,19 @@ declare global {
 const SFX_EXTS = ['ogg', 'mp3', 'wav'] as const;
 const SFX_BASE = `${import.meta.env.BASE_URL}sfx/`;
 
+// Safari/iOS can't decode Ogg Vorbis. Detect once so those browsers don't waste
+// a round-trip fetching an .ogg that fails decode before falling back to .mp3.
+// Inconclusive detection keeps ogg (mp3 still wins via decode-fail fallback).
+function _oggSupported(): boolean {
+  try {
+    return typeof Audio !== 'undefined'
+      && !!new Audio().canPlayType('audio/ogg; codecs="vorbis"');
+  } catch { return false; }
+}
+// Probe order, narrowed at init() to drop ogg where it can't be decoded. The
+// .wav fallback stays in place for any environment missing both compressed forms.
+let _sfxExts: readonly string[] = SFX_EXTS;
+
 // Tier-S: preloaded on init(). Other IDs lazy-load on first use.
 const TIER_S_PRELOAD: string[] = [
   // Base pops × 5 sizes × 3 variants — the core arcade feel
@@ -70,7 +83,7 @@ function _loadOne(ctx: AudioContext, id: string): Promise<AudioBuffer | null> {
   if (existing) return existing;
 
   const p = (async () => {
-    for (const ext of SFX_EXTS) {
+    for (const ext of _sfxExts) {
       try {
         const res = await fetch(`${SFX_BASE}${id}.${ext}`);
         if (!res.ok) continue;
@@ -105,6 +118,8 @@ export const AudioSys = {
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     this.ctx = new AC();
+    // Drop ogg from the probe list on browsers that can't decode it (Safari/iOS).
+    _sfxExts = _oggSupported() ? SFX_EXTS : SFX_EXTS.filter((e) => e !== 'ogg');
     this.master = this.ctx.createGain();
     this.master.gain.value = 0.35;
     this.master.connect(this.ctx.destination);

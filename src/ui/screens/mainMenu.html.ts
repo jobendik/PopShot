@@ -17,6 +17,7 @@
 import { LEVELS } from '../../data/levels';
 import { State } from '../../constants';
 import { AudioSys } from '../../systems/audio';
+import { isFullscreenSupported, toggleFullscreen, syncFullscreenButtons } from '../../systems/fullscreen';
 import {
   dismissWelcomeBack,
   getWelcomeBackBanner,
@@ -162,6 +163,21 @@ export function buildMainMenu(game: Game): HTMLElement {
     soundBtn.textContent = AudioSys.muted ? '🔇' : '🔊';
   });
   root.appendChild(soundBtn);
+
+  // --- Fullscreen toggle (top-right, left of sound) ---
+  // CrazyGames-recommended. Hidden on platforms without element fullscreen
+  // (iOS Safari) so we never show a button that does nothing.
+  if (isFullscreenSupported()) {
+    const fsBtn = document.createElement('button');
+    fsBtn.type = 'button';
+    fsBtn.className = 'menu__fullscreen';
+    fsBtn.dataset.role = 'fullscreen-toggle';
+    fsBtn.setAttribute('aria-label', 'Enter fullscreen');
+    fsBtn.textContent = '⛶';
+    fsBtn.addEventListener('click', () => toggleFullscreen());
+    root.appendChild(fsBtn);
+    syncFullscreenButtons(); // set initial icon/state
+  }
 
   // --- Drifting bubbles (12 of them, positions/scales derived from --i) ---
   const bubbles = document.createElement('div');
