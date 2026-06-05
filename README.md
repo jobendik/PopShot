@@ -85,7 +85,7 @@ The CrazyGames SDK is loaded from `index.html` via the official CDN. Local dev r
 
 The app is configured for GitHub Pages with relative asset paths, so the same production build works for both project pages and user pages without hard-coding a repository name.
 
-Live site: https://jobendik.github.io/BubbleBreaker/
+Live site: https://jobendik.github.io/PopShot/
 
 To publish it:
 
