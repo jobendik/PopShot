@@ -17,8 +17,6 @@
 
 import { State, type GameState } from '../../constants';
 import { AudioSys } from '../../systems/audio';
-import { computeAccountLevel } from '../../systems/progression';
-import { Storage } from '../../systems/storage';
 import type { Game } from '../../game';
 
 const HUD_STATES: ReadonlySet<GameState> = new Set([
@@ -31,7 +29,6 @@ interface Refs {
   bar: HTMLElement;
   scoreValue: HTMLElement;
   scoreDelta: HTMLElement;        // small "+N" pulse next to the score on each pop
-  levelChip: HTMLElement;         // small "Lv N" account-level chip next to the score
   weaponName: HTMLElement;
   weaponAmmo: HTMLElement;
   shieldChip: HTMLElement;
@@ -56,7 +53,6 @@ interface Refs {
 let refs: Refs | null = null;
 let cached = {
   score: -1,
-  accountLevel: -1,
   weapon: '',
   weaponAmmo: -1,
   weaponTime: -1,
@@ -87,7 +83,6 @@ export function buildHUD(game: Game): HTMLElement {
         <div class="hud__score-wrap">
           <span class="hud__score-label">SCORE</span>
           <span class="hud__score-value" data-role="score">0000000</span>
-          <span class="hud__level-chip" data-role="level-chip">Lv 1</span>
           <span class="hud__score-delta" data-role="score-delta"></span>
         </div>
         <div class="hud__weapon-wrap">
@@ -138,7 +133,6 @@ export function buildHUD(game: Game): HTMLElement {
     bar:          root.querySelector('.hud__bar') as HTMLElement,
     scoreValue:   root.querySelector('[data-role="score"]') as HTMLElement,
     scoreDelta:   root.querySelector('[data-role="score-delta"]') as HTMLElement,
-    levelChip:    root.querySelector('[data-role="level-chip"]') as HTMLElement,
     weaponName:   root.querySelector('[data-role="weapon-name"]') as HTMLElement,
     weaponAmmo:   root.querySelector('[data-role="weapon-ammo"]') as HTMLElement,
     shieldChip:   root.querySelector('[data-role="shield"]') as HTMLElement,
@@ -190,13 +184,6 @@ export function syncHUD(game: Game) {
       refs.scoreValue.classList.add('is-pop');
     }
     cached.score = game.score;
-    // Account level — recompute from save projection. Cheap, only runs on
-    // score change (i.e. on pops/clears) and reads a couple of save fields.
-    const lvl = computeAccountLevel(Storage.data).level;
-    if (lvl !== cached.accountLevel) {
-      refs.levelChip.textContent = 'Lv ' + lvl;
-      cached.accountLevel = lvl;
-    }
   }
 
 

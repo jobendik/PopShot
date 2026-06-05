@@ -37,16 +37,17 @@
   align-items: center;
   gap: 12px;
   padding: 12px 18px 12px 12px;
+  /* Solid stamped sticker — ink border with a thick tier-colored left flag,
+     hard offset shadow + colored halo. Matches the level-clear medal slam. */
   background:
-    linear-gradient(90deg, rgba(10, 24, 50, 0.95), rgba(10, 24, 50, 0.72));
-  border: 1px solid var(--medal-color, var(--brand-yellow));
-  border-left-width: 3px;
+    var(--panel-strip),
+    linear-gradient(180deg, var(--panel-fill) 0%, var(--panel-fill-2) 100%);
+  border: var(--panel-border-w) solid var(--ink);
+  border-left: 6px solid var(--medal-color, var(--brand-yellow));
   border-radius: var(--radius-md);
-  backdrop-filter: blur(16px) saturate(160%);
-  -webkit-backdrop-filter: blur(16px) saturate(160%);
   overflow: hidden;
   box-shadow:
-    0 8px 32px -8px rgba(0, 0, 0, 0.6),
+    var(--panel-shadow-sm),
     0 0 30px -10px var(--medal-color, var(--brand-yellow));
   animation:
     medal-in 0.5s var(--ease-out) forwards,
@@ -199,12 +200,12 @@
   align-items: center;
   gap: 12px;
   padding: 10px 18px 10px 12px;
-  background: rgba(10, 24, 50, 0.92);
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  background:
+    var(--panel-strip),
+    linear-gradient(180deg, var(--panel-fill) 0%, var(--panel-fill-2) 100%);
+  border: var(--panel-border-w) solid var(--ink);
   border-radius: var(--radius-pill);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  box-shadow: 0 12px 30px -12px rgba(0, 0, 0, 0.7);
+  box-shadow: var(--panel-shadow-sm);
   animation:
     toast-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards,
     toast-out 0.4s var(--ease-in) 3.4s forwards;
@@ -350,11 +351,10 @@
   align-items: center;
   gap: 10px;
   padding: 8px 14px 8px 8px;
-  background: rgba(10, 24, 50, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: var(--panel-fill);
+  border: 2px solid var(--ink);
   border-radius: var(--radius-md);
-  backdrop-filter: blur(10px) saturate(160%);
-  -webkit-backdrop-filter: blur(10px) saturate(160%);
+  box-shadow: 0 3px 0 var(--ink);
   opacity: 0;
   transform: translateY(8px);
   transition: opacity 0.25s var(--ease-out), transform 0.25s var(--ease-out);
@@ -447,11 +447,10 @@
   align-items: center;
   gap: 2px 10px;
   padding: 8px 14px 8px 10px;
-  background: rgba(10, 24, 50, 0.78);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: var(--panel-fill);
+  border: 2px solid var(--ink);
   border-radius: var(--radius-md);
-  backdrop-filter: blur(12px) saturate(160%);
-  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  box-shadow: 0 3px 0 var(--ink);
   overflow: hidden;
   box-sizing: border-box;
   width: max-content;
@@ -603,12 +602,11 @@
   gap: 14px;
   padding: 16px 18px;
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.01)),
-    rgba(10, 24, 50, 0.62);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+    var(--panel-strip),
+    linear-gradient(180deg, var(--panel-fill) 0%, var(--panel-fill-2) 100%);
+  border: var(--panel-border-w) solid var(--ink);
   border-radius: var(--radius-lg);
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  box-shadow: var(--panel-shadow), var(--panel-highlight);
   overflow: hidden;
   animation: profile-in 0.6s var(--ease-out) 0.15s backwards;
   /* Cap width on wide screens so it stays a card, not a banner. */
@@ -756,8 +754,8 @@
 }
 .menu__profile-stat {
   padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--panel-fill-2);
+  border: 2px solid var(--ink);
   border-radius: var(--radius-sm);
 }
 .menu__profile-stat-label {

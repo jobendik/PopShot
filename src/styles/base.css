@@ -127,6 +127,7 @@ body[data-state="controls"]     #game,
 body[data-state="credits"]      #game,
 body[data-state="stats"]        #game,
 body[data-state="profile"]      #game,
+body[data-state="hub"]          #game,
 body[data-state="daily_intro"]  #game,
 body[data-state="daily_result"] #game,
 body[data-state="victory"]      #game {
@@ -231,18 +232,16 @@ body[data-state="daily_result"] .toasts-layer { display: none; }
 .ui-btn[disabled] { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
 
 .ui-btn--ghost {
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: linear-gradient(180deg, var(--panel-fill) 0%, var(--panel-fill-2) 100%);
   color: var(--paper);
-  border-color: color-mix(in srgb, var(--paper) 28%, transparent);
-  box-shadow: none;
+  border-color: var(--ink);
+  box-shadow: var(--panel-shadow-sm);
 }
 .ui-btn--ghost:hover, .ui-btn--ghost:focus-visible {
   background: var(--brand-yellow);
   color: var(--ink);
   border-color: var(--ink);
-  box-shadow: 0 4px 0 var(--ink);
+  box-shadow: 0 6px 0 var(--ink), 0 12px 24px rgba(0, 0, 0, 0.45);
 }
 
 .ui-btn--cta {
@@ -284,21 +283,24 @@ body[data-state="daily_result"] .toasts-layer { display: none; }
   box-shadow: 0 4px 0 var(--ink), 0 10px 20px rgba(0, 0, 0, 0.4), 0 0 18px rgba(6, 214, 160, 0.45);
 }
 
-/* Card / panel — frosted glass with a top highlight + bottom shadow.
-   Use for every floating info block (stats, settings, results). */
-.ui-card {
+/* Card / panel — solid cel sticker: ink border + hard offset shadow + top
+   cel-highlight strip. Use for every floating info block (stats, settings,
+   results). No backdrop blur — this is a painted panel, not frosted glass. */
+.ui-card, .cel-panel {
   background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
-  border: 1px solid rgba(255, 255, 255, 0.12);
+    var(--panel-strip),
+    linear-gradient(180deg, var(--panel-fill) 0%, var(--panel-fill-2) 100%);
+  border: var(--panel-border-w) solid var(--ink);
   border-radius: var(--radius-lg);
   padding: clamp(12px, 2.4cqi, 24px);
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-  box-shadow:
-    var(--shadow-deep),
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+  box-shadow: var(--panel-shadow), var(--panel-highlight);
   color: var(--paper);
+}
+/* Opt-in biome-accent tint for panels that should pick up the active theme. */
+.cel-panel--acc {
+  background:
+    var(--panel-strip),
+    linear-gradient(180deg, color-mix(in srgb, var(--acc) 22%, var(--panel-fill)) 0%, var(--panel-fill-2) 100%);
 }
 
 /* Stat row — label left, value right, monospace value with a tabular feel */
@@ -340,8 +342,8 @@ body[data-state="daily_result"] .toasts-layer { display: none; }
   gap: 6px;
   padding: 4px 12px;
   border-radius: var(--radius-pill);
-  background: rgba(0, 0, 0, 0.55);
-  border: 1px solid color-mix(in srgb, var(--paper) 25%, transparent);
+  background: var(--panel-fill);
+  border: 2px solid var(--ink);
   color: var(--paper);
   font-size: var(--fs-micro);
   letter-spacing: 0.16em;

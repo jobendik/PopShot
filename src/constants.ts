@@ -56,6 +56,7 @@ export const State = {
   CREDITS: 'credits',
   STATS: 'stats',
   PROFILE: 'profile',
+  HUB: 'hub',
   PLAYING: 'playing',
   PAUSED: 'paused',
   LEVEL_CLEAR: 'level_clear',

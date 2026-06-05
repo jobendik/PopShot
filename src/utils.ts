@@ -21,3 +21,10 @@ export function collideCircleRect(cx, cy, r, rx, ry, rw, rh) {
 export function rectOverlap(a, b) {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
+
+/** Compact number formatter for stat readouts — 12480 → "12.5k", 2_400_000 → "2.4m". */
+export function fmtCompact(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 1_000_000) return (n / 1000).toFixed(n < 10_000 ? 1 : 0).replace(/\.0$/, '') + 'k';
+  return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'm';
+}

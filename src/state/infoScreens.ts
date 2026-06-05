@@ -16,6 +16,13 @@ function dismissOnAnyInput(game: Game) {
   }
 }
 
+// ---------------- Hub ----------------
+// HTML-owned meta screen (profile/rank, weekly detail, mastery). No canvas
+// renderer; this just lets keyboard/gamepad players back out to the menu.
+export function updateHub(game: Game) {
+  dismissOnAnyInput(game);
+}
+
 // ---------------- Controls ----------------
 export function updateControls(game: Game) {
   dismissOnAnyInput(game);
