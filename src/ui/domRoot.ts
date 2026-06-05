@@ -26,6 +26,7 @@ import {
   buildControls, buildCredits, buildStats, syncStats,
   buildHighScores, syncHighScores, buildProfile, syncProfile,
 } from './screens/infoScreens.html';
+import { buildHub, syncHub } from './screens/hub.html';
 import { buildDailyIntro, syncDailyIntro, buildDailyResult, syncDailyResult } from './screens/daily.html';
 import { buildPause, syncPause } from './screens/pause.html';
 import { buildGameOver, syncGameOver } from './screens/gameOver.html';
@@ -72,6 +73,7 @@ class UIRoot {
     this.register(State.CREDITS,      buildCredits());
     this.register(State.STATS,        buildStats(),           syncStats);
     this.register(State.PROFILE,      buildProfile(game),     syncProfile);
+    this.register(State.HUB,          buildHub(game),         syncHub);
     this.register(State.HIGH_SCORES,  buildHighScores(),      syncHighScores);
     this.register(State.DAILY_INTRO,  buildDailyIntro(game),  syncDailyIntro);
     this.register(State.DAILY_RESULT, buildDailyResult(game), syncDailyResult);

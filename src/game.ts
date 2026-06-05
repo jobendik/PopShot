@@ -24,23 +24,26 @@ import { Platform as Sdk } from './systems/platform';
 import { clamp, rand, randi } from './utils';
 import { UI } from './ui/domRoot';
 
-// State-handler modules. Each owns its own update() and render() entry points.
-import { updateMainMenu,    renderMainMenu }                     from './state/mainMenu';
-import { updateModeSelect,  renderModeSelect }                   from './state/modeSelect';
-import { updateLevelSelect, renderLevelSelect }                  from './state/levelSelect';
-import { updateControls,    renderControls,
-         updateHighScores,  renderHighScores,
-         updateCredits,     renderCredits,
-         updateStats,       renderStats,
-         updateProfile,     renderProfile }                         from './state/infoScreens';
-import { updatePlaying,     renderWorld }                         from './state/playing';
-import { updatePaused,      renderPause }                         from './state/pause';
-import { updateLevelClear,  renderLevelClear,
-         updateBossDefeated, renderBossDefeated,
-         updateVictory,     renderVictory }                       from './state/levelClear';
-import { updatePlayerDead, updateGameOver, renderGameOver }       from './state/gameOver';
-import { updateDailyIntro,  renderDailyIntro,
-         updateDailyResult, renderDailyResult }                   from './state/daily';
+// State-handler modules. Each owns its update() entry point; the canvas
+// render() functions are retired (every screen is now HTML/CSS-owned), so
+// only the live update handlers + the gameplay world renderer are imported.
+import { updateMainMenu }                                        from './state/mainMenu';
+import { updateModeSelect }                                      from './state/modeSelect';
+import { updateLevelSelect }                                     from './state/levelSelect';
+import { updateControls,
+         updateHighScores,
+         updateCredits,
+         updateStats,
+         updateProfile,
+         updateHub }                                             from './state/infoScreens';
+import { updatePlaying,     renderWorld }                        from './state/playing';
+import { updatePaused }                                          from './state/pause';
+import { updateLevelClear,
+         updateBossDefeated,
+         updateVictory }                                         from './state/levelClear';
+import { updatePlayerDead, updateGameOver }                      from './state/gameOver';
+import { updateDailyIntro,
+         updateDailyResult }                                     from './state/daily';
 
 // ============================ GAME ==================================
 // devicePixelRatio clamp for the canvas backing store. We honour the device's
@@ -642,6 +645,7 @@ export class Game {
       case State.CREDITS:      updateCredits(this); break;
       case State.STATS:        updateStats(this); break;
       case State.PROFILE:      updateProfile(this); break;
+      case State.HUB:          updateHub(this); break;
       case State.PLAYING:      updatePlaying(this, dt); break;
       case State.PAUSED:       updatePaused(this); break;
       case State.LEVEL_CLEAR:  updateLevelClear(this); break;
@@ -715,17 +719,11 @@ export class Game {
     }
     ctx.translate(sx, sy);
 
+    // Pure-UI states (menus, info, daily, level-clear/game-over/pause, etc.)
+    // are fully owned by the HTML/CSS overlay (see src/ui/), and the canvas is
+    // CSS-hidden for them. Only the gameplay states draw the world; the
+    // overlays paint on top via the DOM, so there is no canvas dispatch here.
     switch (this.state) {
-      case State.MAIN_MENU:    renderMainMenu(this); break;
-      case State.MODE_SELECT:  renderModeSelect(this); break;
-      case State.LEVEL_SELECT: renderLevelSelect(this); break;
-      case State.HIGH_SCORES:  renderHighScores(this); break;
-      case State.CONTROLS:     renderControls(this); break;
-      case State.CREDITS:      renderCredits(this); break;
-      case State.STATS:        renderStats(this); break;
-      case State.PROFILE:      renderProfile(this); break;
-      case State.DAILY_INTRO:  renderDailyIntro(this); break;
-      case State.DAILY_RESULT: renderDailyResult(this); break;
       case State.PLAYING:
       case State.PAUSED:
       case State.PLAYER_DEAD:
@@ -734,11 +732,6 @@ export class Game {
       case State.BOSS_DEFEATED:
       case State.VICTORY:
         renderWorld(this);
-        if (this.state === State.PAUSED)        renderPause(this);
-        if (this.state === State.LEVEL_CLEAR)   renderLevelClear(this);
-        if (this.state === State.GAME_OVER)     renderGameOver(this);
-        if (this.state === State.BOSS_DEFEATED) renderBossDefeated(this);
-        if (this.state === State.VICTORY)       renderVictory(this);
         break;
     }
 

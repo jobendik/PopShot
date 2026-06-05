@@ -85,6 +85,22 @@
   --glow-pink:   0 0 24px rgba(255, 77, 109, 0.55),  0 0 6px rgba(255, 77, 109, 0.85);
   --inset-glass: inset 0 1px 0 rgba(255, 255, 255, 0.22),
                  inset 0 -1px 0 rgba(0, 0, 0, 0.35);
+
+  /* ---- Cel panel surface (sticker-cartoon chrome) ----
+     Solid 2-stop fill + thick ink border + hard offset shadow. Mirrors the
+     .ui-btn ink-shadow language so every panel reads as a die-cut sticker
+     painted in the same world as the canvas — NOT frosted glass.
+     The base fill is deliberately near-INK navy so a panel stays legible on
+     ANY biome backdrop (arctic/city/volcano/boss skies are dark). Panels that
+     want biome flavor opt in via .cel-panel--acc; the base never uses --sky-*. */
+  --panel-fill:      #142038;
+  --panel-fill-2:    #0c1628;
+  --panel-border-w:  3px;
+  --panel-shadow:    0 6px 0 var(--ink), 0 16px 32px rgba(0, 0, 0, 0.5);
+  --panel-shadow-sm: 0 4px 0 var(--ink), 0 10px 20px rgba(0, 0, 0, 0.45);
+  --panel-highlight: inset 0 2px 0 rgba(255, 255, 255, 0.16),
+                     inset 0 -3px 0 rgba(0, 0, 0, 0.30);
+  --panel-strip:     linear-gradient(180deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 14%);
 }
 
 /* ---- Per-biome theme overrides ----
@@ -113,6 +129,7 @@ body[data-theme="boss"]    { --sky-1: #10031c; --sky-2: #3a004d; --g-1: #2b1340;
   .menu__play,
   .menu__daily.is-hot,
   .menu__title-wrap,
+  .menu__title,
   .menu__welcome {
     animation: none !important;
   }
