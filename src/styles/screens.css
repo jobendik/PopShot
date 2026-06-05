@@ -604,9 +604,9 @@
    the CTA stack breathe within the now-scrollable .ui-screen.
    ===================================================================== */
 @container (max-width: 760px) {
-  /* The absolute profile card overlaps the centred CTAs on a short stage.
-     Its stats live on the Profile / Stats screens, so hide it here to keep
-     the menu uncluttered and tap-friendly. */
+  /* The absolute rank badge (the Hub entry point) overlaps the centred CTAs
+     on a short stage, so hide it here. The Hub stays reachable via the "Hub"
+     button in the secondary nav, which is kept visible — do not hide it. */
   .menu .menu__rank-badge { display: none; }
   /* Brand strap is pure decoration — reclaim its vertical space. */
   .menu .menu__brand { display: none; }
@@ -624,11 +624,12 @@
   }
 }
 
-/* Mobile fix: on short landscape stages the absolutely-positioned profile
-   card overlaps the vertically-centred CTA stack even when the container
-   is wider than 760px (e.g. iPad landscape or a 800px-wide phone stage
-   that is only ~450px tall). Hide the card and tighten vertical spacing
-   once the container height drops to mobile-landscape territory. */
+/* Mobile fix: on short landscape stages the absolutely-positioned rank badge
+   overlaps the vertically-centred CTA stack even when the container is wider
+   than 760px (e.g. iPad landscape or a 800px-wide phone stage that is only
+   ~450px tall). Hide the badge (the Hub stays reachable via the secondary
+   nav's "Hub" button) and tighten vertical spacing once the container height
+   drops to mobile-landscape territory. */
 @container (max-height: 500px) {
   .menu .menu__rank-badge { display: none; }
   .menu .menu__brand   { display: none; }
@@ -1080,6 +1081,22 @@
   margin-top: 4px;
 }
 .hub__back { flex-basis: 100%; }
+
+/* ---- Hub: touch + short-stage tightening ----
+   The Hub is reached from the menu's secondary nav; on a landscape phone it
+   becomes a tight, scrollable panel like the other meta screens. The
+   .ui-screen owns the vertical scroll, so this only trims sizes for fit. */
+@media (hover: none) and (pointer: coarse) {
+  .hub__panel   { gap: clamp(8px, 1.4cqi, 14px); }
+  .hub__profile { padding: clamp(10px, 1.8cqi, 16px); gap: 10px; }
+}
+@container (max-height: 500px) {
+  .hub__panel   { width: min(680px, 96cqi); gap: clamp(6px, 1.2cqi, 10px); }
+  .hub__title   { font-size: clamp(1.5rem, 4.4cqi, 2.6rem); }
+  .hub__profile { gap: 8px; }
+  .hub__mastery { grid-template-columns: repeat(auto-fit, minmax(min(170px, 100%), 1fr)); gap: 6px; }
+  .hub__mastery-row { padding: 7px 9px; }
+}
 
 /* =====================================================================
    DAILY INTRO / RESULT
@@ -2015,9 +2032,21 @@
   /* Shrink the hero title so the 3 CTA buttons fit without scrolling. */
   .menu .menu__title      { font-size: clamp(1.8rem, 5cqi, 3.4rem); }
   .menu .menu__subtitle   { font-size: clamp(0.9rem, 2.2cqi, 1.4rem); margin-top: 2px; }
-  /* Missions + secondary nav are non-critical — hide them to reclaim space. */
+  /* Missions block is glanceable-only — hide it to reclaim vertical space (it
+     also surfaces on the result screens). The secondary nav, however, is the
+     ONLY way to reach Levels / Modes / Hub / Controls / Credits on a phone:
+     the rank-badge Hub entry is hidden on this short stage, so hiding the nav
+     too would strand the entire Hub + meta behind PLAY/Daily/Weekly. Keep it,
+     just compact the chips into a tight row. The .ui-screen scrolls, so a
+     wrapped second row always stays reachable. */
   .menu .menu__missions   { display: none; }
-  .menu .menu__secondary  { display: none; }
+  .menu .menu__secondary  { margin-top: clamp(6px, 1.4cqi, 12px); gap: clamp(5px, 1cqi, 8px); }
+  .menu .menu__secondary .ui-btn {
+    min-width: clamp(72px, 13cqi, 110px);
+    min-height: 40px;
+    padding: clamp(6px, 1.2cqi, 10px) clamp(8px, 1.6cqi, 14px);
+    font-size: clamp(0.72rem, 1.3cqi, 0.85rem);
+  }
   /* Compress the PLAY button. */
   .menu .menu__play-label { font-size: clamp(1.3rem, 3.2cqi, 2rem); }
   .menu .menu__play-sub   { margin-top: 2px; font-size: var(--fs-micro); }
@@ -2112,6 +2141,15 @@
   .menu .menu__play-sub    { display: none; }
   .menu .menu__cta-stack   { gap: clamp(4px, 0.8cqi, 6px); }
   .menu .menu__daily-sub   { display: none; }
+  /* Keep the (still-essential) nav reachable but as tight chips on a very
+     short stage. */
+  .menu .menu__secondary   { margin-top: clamp(4px, 1cqi, 8px); gap: 5px; }
+  .menu .menu__secondary .ui-btn {
+    min-width: 0;
+    min-height: 34px;
+    padding: 5px clamp(8px, 1.6cqi, 12px);
+    font-size: clamp(0.68rem, 1.2cqi, 0.8rem);
+  }
   /* Welcome banner takes too much space on a 219px stage — hide it. */
   .menu .menu__welcome     { display: none; }
 }

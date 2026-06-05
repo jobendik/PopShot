@@ -21,7 +21,7 @@ import { Storage } from '../../systems/storage';
 import { currentTitle } from '../../systems/titles';
 import { themeMastery } from '../../systems/mastery';
 import { fmtCompact } from '../../utils';
-import { weeklyBlock } from './resultParts';
+import { missionsBlock, weeklyBlock } from './resultParts';
 import type { Game } from '../../game';
 
 /** Marksman tier from lifetime pops — 25 pops/level, capped at 99. Mirrors
@@ -111,6 +111,8 @@ export function buildHub(game: Game): HTMLElement {
       </div>
     </div>
 
+    <div class="hub__missions" data-role="missions"></div>
+
     <div class="hub__weekly" data-role="weekly"></div>
 
     <div class="hub__section">
@@ -154,6 +156,7 @@ export function buildHub(game: Game): HTMLElement {
     profileStatScore:  panel.querySelector('[data-role="profile-stat-score"]')  as HTMLElement,
     profileStatLevels: panel.querySelector('[data-role="profile-stat-levels"]') as HTMLElement,
     profileStatCombo:  panel.querySelector('[data-role="profile-stat-combo"]')  as HTMLElement,
+    missions: panel.querySelector('[data-role="missions"]') as HTMLElement,
     weekly:  panel.querySelector('[data-role="weekly"]')  as HTMLElement,
     mastery: panel.querySelector('[data-role="mastery"]') as HTMLElement,
   };
@@ -166,7 +169,7 @@ interface Refs {
   profileLvl: HTMLElement; profileXpCur: HTMLElement; profileXpMax: HTMLElement;
   profileRankFill: HTMLElement;
   profileStatScore: HTMLElement; profileStatLevels: HTMLElement; profileStatCombo: HTMLElement;
-  weekly: HTMLElement; mastery: HTMLElement;
+  missions: HTMLElement; weekly: HTMLElement; mastery: HTMLElement;
 }
 
 export function syncHub(_game: Game, root: HTMLElement) {
@@ -191,7 +194,12 @@ export function syncHub(_game: Game, root: HTMLElement) {
   setText(refs.profileStatLevels, String(Storage.data.unlockedLevel || 0));
   setText(refs.profileStatCombo,  '×' + (Storage.data.lifetimeMaxCombo || 0));
 
-  // --- Weekly detail (reuses the result-screen weekly block) ---
+  // --- Daily missions + weekly detail (reuse the result-screen blocks) ---
+  // Re-homed here so the trimmed mobile front-menu (which hides the missions
+  // rail for space) still surfaces them — one tap away, matching how the Hub
+  // already hosts the weekly detail. Diff against current HTML to stay cheap.
+  const missionsHtml = missionsBlock();
+  if (refs.missions.innerHTML !== missionsHtml) refs.missions.innerHTML = missionsHtml;
   const weeklyHtml = weeklyBlock();
   if (refs.weekly.innerHTML !== weeklyHtml) refs.weekly.innerHTML = weeklyHtml;
 
