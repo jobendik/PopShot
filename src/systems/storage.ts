@@ -66,7 +66,8 @@ export interface SaveData {
 }
 
 const KEY_V1 = 'bba_save_v1';
-const KEY_V2 = 'bba_save_v2';
+const KEY_V2_LEGACY = 'bba_save_v2';
+const KEY_V2 = 'popshot_save_v2';
 
 function createDefaultSave(): SaveData {
   return {
@@ -247,6 +248,12 @@ export const Storage: {
   data: createDefaultSave(),
   load() {
     try {
+      // Migrate from the legacy key used when the game was called BubbleBreaker.
+      const rawLegacyV2 = localStorage.getItem(KEY_V2_LEGACY);
+      if (rawLegacyV2 && !localStorage.getItem(KEY_V2)) {
+        localStorage.setItem(KEY_V2, rawLegacyV2);
+        localStorage.removeItem(KEY_V2_LEGACY);
+      }
       const rawV2 = localStorage.getItem(KEY_V2);
       if (rawV2) {
         const parsed = JSON.parse(rawV2);
