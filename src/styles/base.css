@@ -283,6 +283,19 @@ body[data-state="daily_result"] .toasts-layer { display: none; }
   box-shadow: 0 4px 0 var(--ink), 0 10px 20px rgba(0, 0, 0, 0.4), 0 0 18px rgba(6, 214, 160, 0.45);
 }
 
+/* Social-share button (daily result). Cyan keeps it inside the brand palette
+   while still reading as "this posts elsewhere". */
+.ui-btn--share {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--brand-cyan) 70%, white), var(--brand-cyan));
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  box-shadow: 0 4px 0 var(--ink), 0 10px 20px rgba(0, 0, 0, 0.4), 0 0 18px rgba(155, 231, 255, 0.4);
+}
+.ui-btn--share:hover, .ui-btn--share:focus-visible {
+  background: linear-gradient(180deg, #d7f4ff, var(--brand-cyan));
+  box-shadow: 0 6px 0 var(--ink), 0 14px 28px rgba(0, 0, 0, 0.5), 0 0 28px rgba(155, 231, 255, 0.6);
+}
+
 /* Card / panel — solid cel sticker: ink border + hard offset shadow + top
    cel-highlight strip. Use for every floating info block (stats, settings,
    results). No backdrop blur — this is a painted panel, not frosted glass. */

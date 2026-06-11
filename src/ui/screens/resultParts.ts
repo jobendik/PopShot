@@ -171,7 +171,7 @@ export function nextBestAction(game: Game): { text: string; sub?: string } {
   if (game.mode === 'tour' || game.mode === 'score_attack') {
     const L = LEVELS[game.levelIndex];
     if (L) {
-      const cur = Storage.data.bestTour[L.id] || game.score;
+      const cur = Storage.data.bestTour[L.id] || (game.score - game.levelScoreStart);
       const tier = medalFor(cur, L.targetScore);
       const next = nextMedalDelta(cur, L.targetScore, tier);
       if (next) return { text: 'Replay ' + L.name + ' for ' + next.label, sub: next.delta.toLocaleString() + ' more points' };
@@ -237,13 +237,16 @@ export function nextBestActionBlock(game: Game): string {
 export function levelClearHeadline(game: Game): string {
   const L = LEVELS[game.levelIndex];
   if (!L || game.mode !== 'tour') return 'Stage Clear!';
-  const tier = medalFor(game.score, L.targetScore);
+  // Medal judgement uses this stage's score only (the summary total when
+  // available, else the live delta) — mirrors clearLevel() in combat.ts.
+  const levelScore = game.summary ? game.summary.total : game.score - game.levelScoreStart;
+  const tier = medalFor(levelScore, L.targetScore);
   const prevTier = Storage.data.medals[L.id] || 0;
   if (tier === 3 && prevTier < 3) return 'GOLD MEDAL!';
   if (tier === 2 && prevTier < 2) return 'SILVER MEDAL!';
   if (tier === 1 && prevTier < 1) return 'BRONZE MEDAL!';
   const best = Storage.data.bestTour[L.id] || 0;
-  if (game.score >= best && game.score > 0 && best > 0) return 'NEW BEST!';
+  if (levelScore >= best && levelScore > 0 && best > 0) return 'NEW BEST!';
   if (game.shotsFired > 0 && game.shotsFired === game.shotsHit) return 'PERFECT CLEAR!';
   if (game.lives === 1) return 'CLUTCH CLEAR!';
   return 'Level Clear!';
@@ -272,12 +275,13 @@ export function almostCallout(game: Game): { text: string; kind: 'mission' | 'me
   if (game.mode === 'tour' || game.mode === 'score_attack') {
     const L = LEVELS[game.levelIndex];
     if (L) {
+      const levelScore = game.score - game.levelScoreStart;
       const cur = Storage.data.bestTour[L.id] || 0;
-      if (cur > 0 && game.score > 0 && game.score >= cur * 0.85 && game.score < cur) {
-        return { text: 'Within ' + (cur - game.score).toLocaleString() + ' of your best', kind: 'best' };
+      if (cur > 0 && levelScore > 0 && levelScore >= cur * 0.85 && levelScore < cur) {
+        return { text: 'Within ' + (cur - levelScore).toLocaleString() + ' of your best', kind: 'best' };
       }
-      const tier = medalFor(game.score, L.targetScore);
-      const next = nextMedalDelta(game.score, L.targetScore, tier);
+      const tier = medalFor(levelScore, L.targetScore);
+      const next = nextMedalDelta(levelScore, L.targetScore, tier);
       if (next && next.delta <= L.targetScore * 0.2 && next.delta > 0) {
         return { text: next.delta.toLocaleString() + ' points from ' + next.label, kind: 'medal' };
       }

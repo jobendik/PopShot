@@ -438,12 +438,18 @@ export function clearLevel(game: Game) {
     return;
   }
 
+  // Per-level score: only the points earned on THIS stage (including the
+  // clear bonuses above). Medals and per-level bests use this delta so a
+  // level's medal means the same thing whether it was reached mid-run or
+  // replayed directly from level select.
+  const levelScore = game.score - game.levelScoreStart;
+
   const L = LEVELS[game.levelIndex];
   if (L && game.mode === 'tour') {
     const cur = Storage.data.bestTour[L.id] || 0;
-    const improvedExisting = cur > 0 && game.score > cur;
-    if (game.score > cur) Storage.data.bestTour[L.id] = game.score;
-    const newTier = medalFor(game.score, L.targetScore);
+    const improvedExisting = cur > 0 && levelScore > cur;
+    if (levelScore > cur) Storage.data.bestTour[L.id] = levelScore;
+    const newTier = medalFor(levelScore, L.targetScore);
     const prevTier = Storage.data.medals[L.id] || 0;
     if (newTier > prevTier) Storage.data.medals[L.id] = newTier;
     game.unlockedLevel = Math.max(game.unlockedLevel, game.levelIndex + 1);
@@ -469,7 +475,7 @@ export function clearLevel(game: Game) {
     FX.toast('success', 'LEVEL CLEAR', L.name + ' +' + total);
   } else if (L && game.mode === 'score_attack') {
     const cur = Storage.data.bestTour[L.id] || 0;
-    if (game.score > cur) { Storage.data.bestTour[L.id] = game.score; Storage.save(); }
+    if (levelScore > cur) { Storage.data.bestTour[L.id] = levelScore; Storage.save(); }
     FX.toast('success', 'STAGE CLEAR', '+' + total);
   }
 
@@ -478,10 +484,12 @@ export function clearLevel(game: Game) {
   // counter is bumped live in popBall as the combo grows, so we can't
   // compare to that — preRunMaxCombo is the frozen "before" value.
   const newComboBest = game.maxCombo > game.preRunMaxCombo && game.maxCombo >= 5;
+  // The summary card shows THIS stage's earnings (levelScore), not the run
+  // total — that's what the medal was judged on and what "Best" refers to.
   game.summary = {
-    base: game.score - total,
+    base: levelScore - total,
     time: timeBonus, accuracy: accuracyBonus, combo: comboBonus, noMiss: noMissBonus,
-    total: game.score,
+    total: levelScore,
     best: L ? (Storage.data.bestTour[L.id] || 0) : 0,
     tricks: game.runTricks,
     newComboBest,

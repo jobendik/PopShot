@@ -343,6 +343,11 @@ export const AudioSys = {
     if (this._playVariant('pop/split', 0.7)) return;
     this.beep(380, 0.1, 'sawtooth', 0.2, 120);
   },
+  /** Soft descending blip when a shot dies without hitting anything and the
+   *  combo breaks — makes the streak loss audible without being punishing. */
+  miss() {
+    this.beep(320, 0.09, 'sine', 0.1, -140);
+  },
   /** Combo-milestone fanfare: short ascending arpeggio whose pitch rises with the
    *  milestone level (1 = first milestone). Procedurally synthesized, no assets. */
   comboHit(level: number) {

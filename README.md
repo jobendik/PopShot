@@ -17,7 +17,7 @@ Reconsider later only if development moves toward asset-heavy worlds, reusable s
 ## What's in the build
 
 ### Modes
-- **Tour** — 18 hand-crafted levels across 6 worlds (beach → desert → arctic → city → volcano → airship) culminating in the Commander RIFT boss fight.
+- **Tour** — 24 hand-crafted levels across 6 worlds (beach → desert → arctic → city → volcano → airship) culminating in the Commander RIFT boss fight. Every world is 4 levels; the back half showcases the hexagon balls and the full bestiary (birds, red bird, dragon, ball-fish).
 - **Score Attack** — 3 lives, no continues, cycles Tour levels. Beat your best.
 - **Panic Mode** — endless waves with the **Rainbow Gauge** progress bar, periodic **Star Bubbles** (Clock-face freeze or Star-face screen-clear), and flashing time-stop micro-balls.
 - **Boss Rush** — every boss in sequence; no retries between fights. Best run + best score persisted.
@@ -41,7 +41,7 @@ Reconsider later only if development moves toward asset-heavy worlds, reusable s
 
 ### Persistence & retention
 - Versioned save (`bba_save_v2`) with v1 migration. Cloud-mirror via the CrazyGames Data Module, merged on the higher-progress side per field.
-- Per-level bronze/silver/gold medals (`targetScore × {1.0, 1.25, 1.5}`) rendered on the level-select grid.
+- Per-level bronze/silver/gold medals (`targetScore × {1.0, 1.25, 1.5}`) rendered on the level-select grid. Medals judge the score earned **on that level only**, so every medal is earnable by replaying the level directly from level select.
 - Daily streak counter on the main menu, welcome-back banner across days, idle-rotation hints on the title screen.
 - Titles system (Bubble Sage, Daily Devotee, Boss Slayer, Detonator, Marksman, world masters, etc.) computed on demand from save state.
 
@@ -60,7 +60,7 @@ src/
 ├── main.ts                 # boot, SDK init, error handlers, first-visit auto-start
 ├── game.ts                 # Game orchestrator: entity arrays, lifecycle, main loop
 ├── constants.ts            # W/H/GRAVITY, ball/weapon/pickup/mode types, themes
-├── data/levels.ts          # 18 + 1 hand-crafted level definitions (data-driven)
+├── data/levels.ts          # 24 + 1 hand-crafted level definitions (data-driven)
 ├── entities/               # Ball, Boss, Crab, Creature, Destructible, Hazard,
 │                           # Particle, Pickup, Platform, Player, Projectile
 ├── rendering/canvas.ts     # background, ambience layer, shared draw helpers

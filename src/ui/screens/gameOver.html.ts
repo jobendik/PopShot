@@ -48,7 +48,8 @@ export function buildGameOver(game: Game): HTMLElement {
     if (game.mode === 'score_attack') game.startScoreAttack();
     else if (game.mode === 'panic')     game.startPanic();
     else if (game.mode === 'boss_rush') game.startBossRush();
-    else                                game.loadLevel(game.levelIndex);
+    // startTour (not loadLevel) so lives and score reset for the new attempt.
+    else                                game.startTour(game.levelIndex);
   });
   card.querySelector<HTMLElement>('[data-role="menu"]')!.addEventListener('click', () => {
     AudioSys.menu();

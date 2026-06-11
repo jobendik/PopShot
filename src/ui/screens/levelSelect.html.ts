@@ -1,6 +1,7 @@
 /**
- * Level select grid. 18 cells in a 6×3 grid, each showing level number,
- * theme, and earned medal. Boss levels get a pink border accent.
+ * Level select grid. 24 levels in a 6-wide grid (one row per world half),
+ * each cell showing level number, theme, and earned medal — plus the boss
+ * as a full-width finale banner row at the bottom.
  */
 
 import { State } from '../../constants';
@@ -49,9 +50,9 @@ export function buildLevelSelect(game: Game): HTMLElement {
     if (LEVELS[i].boss) cell.classList.add('is-boss');
     cell.dataset.levelIndex = String(i);
     cell.innerHTML = `
-      <span class="level-cell__num">${i + 1}</span>
+      <span class="level-cell__num">${LEVELS[i].boss ? LEVELS[i].name : i + 1}</span>
       <span class="level-cell__medal" data-role="medal"></span>
-      <span class="level-cell__theme">${LEVELS[i].theme}</span>
+      <span class="level-cell__theme">${LEVELS[i].boss ? 'final boss' : LEVELS[i].theme}</span>
     `;
     cell.addEventListener('click', () => {
       if (cell.classList.contains('is-locked')) {
@@ -81,6 +82,9 @@ export function syncLevelSelect(game: Game, root: HTMLElement) {
     const L = LEVELS[i];
     const locked = i > game.unlockedLevel;
     cell.classList.toggle('is-locked', locked);
+    // Keyboard cursor — mirrors levelSelectIndex so arrow-key navigation has
+    // a visible focus ring in the HTML grid.
+    cell.classList.toggle('is-selected', i === game.levelSelectIndex);
     const best = Storage.data.bestTour?.[L.id] || 0;
     const medal = medalFor(L.targetScore, best);
     const medalEl = cell.querySelector<HTMLElement>('[data-role="medal"]');

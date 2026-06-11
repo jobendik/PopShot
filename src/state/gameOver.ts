@@ -90,8 +90,10 @@ export function startRewardedContinue(game: Game) {
       const keepLevel = game.levelIndex;
       const keepQueue = game.bossRushQueue.slice();
       const keepCount = game.bossRushCount;
+      const keepLevelStart = game.levelScoreStart;
       game.loadLevel(keepLevel);
       game.score = keepScore;
+      game.levelScoreStart = Math.min(keepLevelStart, keepScore);
       game.bossRushQueue = keepQueue;
       game.bossRushCount = keepCount;
       game.usedRewardedContinue = true; // _resetRunFlags is not called here
@@ -121,7 +123,10 @@ export function updateGameOver(game: Game) {
     if (game.mode === 'score_attack') game.startScoreAttack();
     else if (game.mode === 'panic') game.startPanic();
     else if (game.mode === 'boss_rush') game.startBossRush();
-    else game.loadLevel(game.levelIndex);
+    // Tour retry must go through startTour: a bare loadLevel would carry the
+    // depleted lives (0) and stale score into the new attempt, making the
+    // very first hit an instant second game over.
+    else game.startTour(game.levelIndex);
   }
 }
 

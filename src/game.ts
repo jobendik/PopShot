@@ -3,7 +3,7 @@ import { LEVELS } from './data/levels';
 import { Ball } from './entities/ball';
 import { Boss } from './entities/boss';
 import { Crab } from './entities/crab';
-import { Creature, type CreatureKind } from './entities/creature';
+import { Creature } from './entities/creature';
 import { Destructible } from './entities/destructible';
 import { Hazard } from './entities/hazard';
 import { Particle, FloatingText, Shockwave, SmokeCloud } from './entities/particle';
@@ -14,7 +14,7 @@ import { Projectile } from './entities/projectile';
 import { emit } from './systems/analytics';
 import { AudioSys } from './systems/audio';
 import { clearLevel, explodeProjectile, killPlayer, popBall } from './systems/combat';
-import { consumePressed, flushHoverSound, keysPressed, pointer, tickAutoFire, tickGamepadInputs } from './systems/input';
+import { consumePressed, flushHoverSound, isTouchDevice, keysPressed, pointer, tickAutoFire, tickGamepadInputs } from './systems/input';
 import { Storage } from './systems/storage';
 import { pickDailyChallenge, type DailyPick } from './systems/daily';
 import { advanceMissions, getWeeklyEvent, recordWeeklyCombo, recordWeeklyPanic, recordWeeklyScoreAttack } from './systems/retention';
@@ -115,6 +115,11 @@ export class Game {
    *  even if no balls remain, so the player gets the screen-clear option. */
   panicStarTimer: number;
   score: number;
+  /** Run score at the moment the current level was loaded. Tour / Score
+   *  Attack medals and per-level bests are computed against the DELTA
+   *  (score − levelScoreStart) so a level's medal is earnable whether the
+   *  player arrived mid-run or jumped straight in from level select. */
+  levelScoreStart: number;
   lives: number;
   timer: number;
   combo: number;
@@ -222,6 +227,7 @@ export class Game {
     this.panicStarTimer = 0;
 
     this.score = 0;
+    this.levelScoreStart = 0;
     this.lives = 3;
     this.timer = 60;
     this.combo = 0;
@@ -366,6 +372,7 @@ export class Game {
     this.modifier = null;
     this.lives = 3;
     this.score = 0;
+    this.levelScoreStart = 0;
     this._resetRunFlags();
     this.preRunTotalXp = computeTotalXp(Storage.data);
     this.preRunStageBest = 0;
@@ -434,7 +441,15 @@ export class Game {
     this.targetScore = L.targetScore;
     this.levelName = L.name;
     this.bossLevel = !!L.boss;
+    this.levelScoreStart = this.score;
     this.introText = L.intro || '';
+    // The level-1 tutorial line is written for keyboards; on touch devices
+    // describe the actual on-screen controls instead.
+    if (index === 0 && isTouchDevice && L.intro) {
+      this.introText = Storage.data.mobileAutoFire
+        ? 'Hold ◀ ▶ to move — your cannon fires by itself.\nPop every ball to win!'
+        : 'Hold ◀ ▶ to move, hold FIRE to shoot.\nPop every ball to win!';
+    }
     this.introTimer = L.intro ? 4 : 0;
     this.introTitle = '';
 
@@ -470,8 +485,8 @@ export class Game {
     this.crabs = (L.crabs || []).map(c => new Crab(c.x, (c as any).y ?? GROUND_Y, c.minX, c.maxX, c.speed));
     // Creatures spawn on a per-level basis (data field) or are added at
     // runtime by Panic / Boss Rush spawners.
-    this.creatures = ((L as any).creatures || []).map((c: any) =>
-      new Creature(c.kind as CreatureKind, c.x, c.y ?? (c.kind === 'dragon' ? GROUND_Y : 180), c.dir ?? 1));
+    this.creatures = (L.creatures || []).map(c =>
+      new Creature(c.kind, c.x, c.y ?? (c.kind === 'dragon' ? GROUND_Y : 180), c.dir ?? 1));
     this.combo = 0; this.maxCombo = 0;
     this.shotsHit = 0; this.shotsFired = 0;
     this.chainCount = 0; this.chainTimer = 0;
@@ -484,6 +499,10 @@ export class Game {
     this.shake = 0; this.flash = 0; this.slowTime = 0; this.freezeTime = 0; this.magnetTime = 0; this.comboBoostTime = 0; this.hitPause = 0;
     this.bossDefeatedTimer = 0; this.lastTimerWarning = 0;
     this.player = new Player(W / 2, GROUND_Y);
+    // Brief spawn protection so the opening seconds (often spent reading the
+    // intro banner) can never be an instant unfair death — e.g. a ball path
+    // or a big_bubbles-modified spawn crossing the player's start position.
+    this.player.invuln = 1.5;
     this.player2 = null;
     this.boss = L.boss ? new Boss() : null;
     this.state = State.PLAYING;

@@ -3,6 +3,7 @@ import { Pickup } from '../entities/pickup';
 import { dragonDropPickup } from '../entities/creature';
 import { collideCircleRect, rand, rectOverlap } from '../utils';
 import { AudioSys } from './audio';
+import { Haptics } from './haptics';
 import type { Game } from '../game';
 
 /**
@@ -57,12 +58,16 @@ export function resolveCollisions(game: Game) {
     if (cr.dead) continue;
     const hb = cr.getHitbox();
     // Creature vs ball — dragons pop, hostile birds don't interact (would feel
-    // unfair if they popped balls AND stunned us).
-    if (!cr.hostile) {
+    // unfair if they popped balls AND stunned us). Rate-limited to one pop
+    // per beat (popCooldown) so the dragon assists instead of insta-clearing
+    // whole ball families the frame their children spawn.
+    if (!cr.hostile && cr.popCooldown <= 0) {
       for (const b of game.balls) {
         if (b.dead) continue;
         if (collideCircleRect(b.x, b.y, b.r, hb.x, hb.y, hb.w, hb.h)) {
           game._popBall(b, cr);
+          cr.popCooldown = 1.2;
+          break;
         }
       }
     }
@@ -227,6 +232,16 @@ export function resolveCollisions(game: Game) {
       if (pk.x > hb.x - 14 && pk.x < hb.x + hb.w + 14 && pk.y > hb.y - 14 && pk.y < hb.y + hb.h + 14) {
         pk.apply(player, game);
         pk.dead = true;
+        // Collection juice — a small ring + spark burst at the grab point so
+        // picking something up lands with the same weight as popping a ball.
+        game.shockwaves.push(new Shockwave(pk.x, pk.y, 54, '#ffd60a', 0.3));
+        for (let i = 0; i < 8; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const s = rand(60, 160);
+          game.particles.push(new Particle(pk.x, pk.y, Math.cos(a) * s, Math.sin(a) * s - 60, rand(0.25, 0.45), i % 2 ? '#ffd60a' : '#fff', 4, 160));
+        }
+        game.shake = Math.max(game.shake, 2.5);
+        Haptics.pop();
       }
     }
   }

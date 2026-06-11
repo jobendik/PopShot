@@ -17,7 +17,7 @@ interface ModeDef {
 }
 
 const MODES: ModeDef[] = [
-  { key: 'tour',         icon: '⛰', title: 'Tour',         desc: 'The campaign. 18 stages across 6 worlds + boss.' },
+  { key: 'tour',         icon: '⛰', title: 'Tour',         desc: 'The campaign. 24 stages across 6 worlds + boss.' },
   { key: 'score_attack', icon: '⏱', title: 'Score Attack', desc: '3 lives, no continues. Beat your best.',
     bestKey: 'bestScoreAttack', bestLabel: 'Best score' },
   { key: 'panic',        icon: '⚡', title: 'Panic Mode',   desc: 'Endless waves with a Rainbow Gauge and Star Bubbles.',

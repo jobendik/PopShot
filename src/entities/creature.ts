@@ -32,6 +32,11 @@ export class Creature {
   hostile: boolean;
   /** Score awarded when shot down. Red birds yield more + guaranteed pickup. */
   score: number;
+  /** Friendly-pop rate limiter. Without it, a dragon standing under a split
+   *  instantly re-pops every child the moment it spawns, vacuuming an entire
+   *  ball family in one frame — which both clears levels by itself and sprays
+   *  size-0 balls across the floor. One pop, then a beat to walk away. */
+  popCooldown: number;
 
   constructor(kind: CreatureKind, x: number, y: number, dir: number = 1) {
     this.kind = kind;
@@ -39,6 +44,7 @@ export class Creature {
     this.y = y;
     this.phase = Math.random() * Math.PI * 2;
     this.dead = false;
+    this.popCooldown = 0;
 
     if (kind === 'dragon') {
       this.w = 38;
@@ -82,6 +88,7 @@ export class Creature {
 
   update(dt: number) {
     this.phase += dt * 4;
+    if (this.popCooldown > 0) this.popCooldown = Math.max(0, this.popCooldown - dt);
     if (this.kind === 'dragon') {
       this.x += this.vx * dt;
       this.y = GROUND_Y;
