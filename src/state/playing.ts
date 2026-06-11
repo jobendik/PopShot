@@ -182,6 +182,9 @@ export function updatePlaying(game: Game, dt: number) {
   // --- Cleanup ---
   for (const p of game.projectiles) {
     if (p.dead && !p.didHit && p.type !== 'flame') {
+      // Audible cue that the streak broke — the combo chip vanishing alone
+      // is easy to miss in the middle of a dodge.
+      if (game.combo >= 2) AudioSys.miss();
       game.combo = 0;
       game.comboDecay = 0;
     }
@@ -287,6 +290,22 @@ export function renderWorld(game: Game) {
   for (const sc of game.smokeClouds) sc.draw(ctx);
   for (const ft of game.floatingTexts) ft.draw(ctx);
 
+  // Final-seconds urgency vignette — red edge glow that builds as the clock
+  // runs out, in sync with the warning beeps. Reduced-motion players get a
+  // faint static tint instead of the pulse.
+  if (game.state === State.PLAYING && game.mode !== 'panic' && game.timer > 0 && game.timer < 10) {
+    const urgency = 1 - game.timer / 10;
+    const pulse = Storage.data.reducedMotion
+      ? 0.5
+      : 0.5 + Math.sin(game.t * (6 + urgency * 6)) * 0.5;
+    const alpha = (0.08 + urgency * 0.2) * (0.55 + pulse * 0.45);
+    const grad = ctx.createRadialGradient(W / 2, H / 2, H * 0.42, W / 2, H / 2, H * 0.85);
+    grad.addColorStop(0, 'rgba(255,45,60,0)');
+    grad.addColorStop(1, `rgba(255,45,60,${alpha.toFixed(3)})`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+  }
+
   // First-ever-session control hint — a calm pill above the player showing
   // the basic controls. Shown only until the player has popped their very
   // first ball ever (firstPopCelebrated is a sticky one-way flag in Storage).
@@ -357,7 +376,8 @@ export function renderWorld(game: Game) {
     ctx.save();
     ctx.globalAlpha = a;
     ctx.translate(0, offsetY);
-    const bx = W/2 - 300, by = H/2 - 60, bw = 600, bh = 120;
+    const showTarget = game.mode === 'tour' && game.targetScore > 0 && !game.bossLevel;
+    const bx = W/2 - 300, by = H/2 - 60, bw = 600, bh = showTarget ? 138 : 120;
     // Overlay-card chrome to match the HTML result/pause cards: deep navy
     // fill, inner top highlight, accent hairline border, top accent bar.
     ctx.fillStyle = 'rgba(10,24,50,0.86)';
@@ -381,6 +401,13 @@ export function renderWorld(game: Game) {
     ctx.textAlign = 'center';
     const lines = game.introText.split('\n');
     for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], W/2, H/2 + 16 + i * 22);
+    // Tour stages: surface the bronze-medal target up front so the score
+    // goal is a plan, not a surprise on the result screen.
+    if (showTarget) {
+      ctx.font = uiFont(13, 800);
+      ctx.fillStyle = PAL.cyan;
+      ctx.fillText('MEDAL TARGET  ' + game.targetScore.toLocaleString(), W/2, by + bh - 14);
+    }
     ctx.restore();
   }
 }

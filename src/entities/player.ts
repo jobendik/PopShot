@@ -4,6 +4,7 @@ import { keys } from '../systems/input';
 import { equippedPalette } from '../systems/titles';
 import { clamp } from '../utils';
 import { roundRect } from '../rendering/canvas';
+import { Particle } from './particle';
 import { Projectile } from './projectile';
 import { drawBot, ROBOT_P2_PALETTE, ROBOT_MUZZLE_LOCAL_Y } from './robot';
 import type { Game } from '../game';
@@ -162,7 +163,22 @@ export class Player {
       this.tryShoot(game);
       // A shot actually left the barrel iff tryShoot bumped the cooldown back
       // up — that's the cue to (re)start the cannon recoil animation.
-      if (this.shotCooldown > cdBefore) this.fireT = 0;
+      if (this.shotCooldown > cdBefore) {
+        this.fireT = 0;
+        // Muzzle sparks — a few fast, short-lived embers at the cannon tip so
+        // the shot reads visually, not just from the recoil + sound. Skipped
+        // for the flamethrower (its continuous muzzle glow covers this).
+        if (this.weapon !== 'flame') {
+          const m = this.getMuzzle();
+          for (let i = 0; i < 4; i++) {
+            game.particles.push(new Particle(
+              m.x, m.y,
+              (Math.random() - 0.5) * 120, -140 - Math.random() * 140,
+              0.1 + Math.random() * 0.08, i % 2 ? '#ffd60a' : '#fff', 3, 0,
+            ));
+          }
+        }
+      }
     }
 
     // Advance the cannon recoil envelope + the cheer reaction.
@@ -524,6 +540,26 @@ export class Player {
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
+      ctx.restore();
+    }
+
+    // Muzzle flash — a two-frame bloom right after a shot leaves the barrel.
+    // Pairs with the spark particles spawned in update(); together they make
+    // every trigger pull feel like it did something.
+    if (this.fireT >= 0 && this.fireT < 0.07) {
+      const m = this.getMuzzle();
+      const k = 1 - this.fireT / 0.07;
+      ctx.save();
+      ctx.globalAlpha = 0.75 * k;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(m.x, m.y - 2, 4 + k * 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 0.4 * k;
+      ctx.fillStyle = '#ffd60a';
+      ctx.beginPath();
+      ctx.arc(m.x, m.y - 2, 8 + k * 8, 0, Math.PI * 2);
+      ctx.fill();
       ctx.restore();
     }
 

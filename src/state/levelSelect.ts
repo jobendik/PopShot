@@ -7,9 +7,11 @@ import { Storage } from '../systems/storage';
 import { UI } from '../ui/domRoot';
 import type { Game } from '../game';
 
-// Layout constants shared by update (hit-testing) and render.
-const COLS = 5;
-const CELL_W = 168;
+// Layout constants shared by update (hit-testing) and the legacy canvas
+// render. COLS matches the HTML grid (.levels__grid, 6 columns) so the
+// keyboard cursor moves the way the screen looks.
+const COLS = 6;
+const CELL_W = 140;
 const CELL_H = 68;
 const GAP = 8;
 const START_Y = 130;
@@ -19,16 +21,19 @@ function gridOrigin() {
 }
 
 export function updateLevelSelect(game: Game) {
-  const maxLevel = LEVELS.length - 1;
+  // Keyboard cursor never wanders into the locked tail of the grid.
+  const maxLevel = Math.min(LEVELS.length - 1, game.unlockedLevel);
+  game.levelSelectIndex = Math.min(game.levelSelectIndex, maxLevel);
   if (consumePressed('ArrowLeft')  || consumePressed('KeyA')) { game.levelSelectIndex = Math.max(0, game.levelSelectIndex - 1); AudioSys.menu(); }
   if (consumePressed('ArrowRight') || consumePressed('KeyD')) { game.levelSelectIndex = Math.min(maxLevel, game.levelSelectIndex + 1); AudioSys.menu(); }
   if (consumePressed('ArrowUp')    || consumePressed('KeyW')) { game.levelSelectIndex = Math.max(0, game.levelSelectIndex - COLS); AudioSys.menu(); }
   if (consumePressed('ArrowDown')  || consumePressed('KeyS')) { game.levelSelectIndex = Math.min(maxLevel, game.levelSelectIndex + COLS); AudioSys.menu(); }
   if (consumePressed('Escape')) { game.state = State.MAIN_MENU; AudioSys.menu(); return; }
-  // Click on a tile = pick + start.
+  // Click on a tile = pick + start (legacy canvas hit-test; the HTML grid's
+  // buttons handle clicks themselves and already respect the lock state).
   if (pointer.pressed) {
     const startX = gridOrigin();
-    for (let i = 0; i < LEVELS.length; i++) {
+    for (let i = 0; i <= maxLevel; i++) {
       const cx = startX + (i % COLS) * (CELL_W + GAP);
       const cy = START_Y + Math.floor(i / COLS) * (CELL_H + GAP);
       if (pointerHit(cx, cy, CELL_W, CELL_H)) {
@@ -40,7 +45,7 @@ export function updateLevelSelect(game: Game) {
       }
     }
   }
-  if (consumeAnyConfirm()) {
+  if (consumeAnyConfirm() && game.levelSelectIndex <= game.unlockedLevel) {
     AudioSys.menu();
     game.startTour(game.levelSelectIndex);
   }

@@ -2,7 +2,7 @@ import { BALL_BOUNCE, BALL_COLORS, BALL_HSPEED, BALL_RADIUS, CEILING_Y, GROUND_Y
 import { AudioSys } from '../systems/audio';
 import { clamp, collideCircleRect, rand, randi } from '../utils';
 import { Hazard } from './hazard';
-import { Particle, SmokeCloud } from './particle';
+import { Particle, Shockwave, SmokeCloud } from './particle';
 import { Pickup } from './pickup';
 import { INK, displayFont } from '../rendering/theme';
 import type { Game } from '../game';
@@ -133,7 +133,13 @@ export class Ball {
       // Cycle between Clock (mode 0, ~freeze) and Star (mode 1, ~clear).
       // Long cycle (~3 s per face) so the player can choose; matches Pang.
       this.starCycle += dt;
-      if (this.starCycle > 3) { this.starCycle = 0; this.starMode = 1 - this.starMode; }
+      if (this.starCycle > 3) {
+        this.starCycle = 0;
+        this.starMode = 1 - this.starMode;
+        // Face-flip ping — a soft ring so the player notices the reward on
+        // offer just changed without having to stare at the bubble.
+        game.shockwaves.push(new Shockwave(this.x, this.y, this.r + 14, '#ffffff', 0.25));
+      }
     }
 
     // Physics
@@ -237,7 +243,14 @@ export class Ball {
     if (this.type === 'armored' && this.armorHits > 0) {
       this.armorHits--;
       AudioSys.bossHit();
-      game.particles.push(new Particle(this.x, this.y, 0, -100, 0.4, '#fff', 6));
+      // Armor-break clang: spark spray + a small ring so the "that hit
+      // counted" beat is unmissable — the cross-strap also disappears.
+      for (let i = 0; i < 8; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const s = rand(80, 200);
+        game.particles.push(new Particle(this.x, this.y, Math.cos(a) * s, Math.sin(a) * s - 60, rand(0.25, 0.45), i % 2 ? '#fff' : '#c7ccd1', 5, 160));
+      }
+      game.shockwaves.push(new Shockwave(this.x, this.y, this.r + 18, '#ffffff', 0.22));
       return null; // not destroyed
     }
     if (this.type === 'explosive') {

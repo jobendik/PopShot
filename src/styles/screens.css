@@ -740,7 +740,24 @@
   z-index: 2;
 }
 .level-cell.is-locked { opacity: 0.4; cursor: not-allowed; filter: grayscale(0.8); }
-.level-cell.is-boss   { border-color: color-mix(in srgb, var(--brand-pink) 80%, transparent); box-shadow: 0 0 14px rgba(255, 77, 109, 0.35); }
+.level-cell.is-selected {
+  border-color: var(--brand-yellow);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-yellow) 60%, transparent), var(--panel-shadow-sm);
+}
+/* The boss occupies its own full-width banner row at the bottom of the grid —
+   a deliberate finale, and it keeps the 4-per-world grid rows clean. */
+.level-cell.is-boss {
+  grid-column: 1 / -1;
+  aspect-ratio: auto;
+  min-height: 56px;
+  flex-direction: row;
+  gap: clamp(8px, 1.6cqi, 16px);
+  border-color: color-mix(in srgb, var(--brand-pink) 80%, transparent);
+  box-shadow: 0 0 14px rgba(255, 77, 109, 0.35);
+}
+.level-cell.is-boss .level-cell__theme,
+.level-cell.is-boss .level-cell__medal { margin-top: 0; }
+.level-cell.is-boss .level-cell__theme { color: var(--brand-pink); opacity: 1; letter-spacing: 0.18em; }
 .level-cell__num    { font-family: var(--font-display); font-size: var(--fs-h2); line-height: 1; color: var(--brand-yellow); }
 .level-cell__medal  { font-size: var(--fs-small); letter-spacing: 0.12em; margin-top: 2px; }
 .level-cell__theme  { font-size: var(--fs-micro); opacity: 0.6; margin-top: 4px; letter-spacing: 0.1em; text-transform: uppercase; }
@@ -1768,6 +1785,11 @@
 }
 @keyframes confetti-fall {
   to { transform: translateY(120cqh) rotate(720deg); opacity: 0.3; }
+}
+/* Honor the OS reduced-motion preference — the celebration cards stand on
+   their own without an infinite particle animation. */
+@media (prefers-reduced-motion: reduce) {
+  .confetti { display: none; }
 }
 
 /* =====================================================================

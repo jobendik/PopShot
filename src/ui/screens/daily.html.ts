@@ -95,7 +95,7 @@ export function buildDailyResult(game: Game): HTMLElement {
     <div data-role="nba"></div>
     <div class="daily__actions">
       <button type="button" class="ui-btn ui-btn--success" data-role="copy">Copy Result</button>
-      <button type="button" class="ui-btn" data-role="tweet" style="background:#1da1f2;color:#fff;border-color:var(--ink);">Share on X</button>
+      <button type="button" class="ui-btn ui-btn--share" data-role="tweet">Share on X</button>
       <button type="button" class="ui-btn ui-btn--cta" data-role="menu">Main Menu</button>
     </div>
   `;

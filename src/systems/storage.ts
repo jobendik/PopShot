@@ -63,6 +63,10 @@ export interface SaveData {
   mobileHaptics: boolean;
   /** Mobile-only: one-time-seen flag for the first-play touch overlay. */
   mobileOnboardingSeen: boolean;
+  /** Medal-scoring generation. Generation 2 switched Tour medals from
+   *  cumulative-run scores to per-level scores; bests/medals recorded under
+   *  the old scale are incomparable and get reset once on upgrade. */
+  medalScale: number;
 }
 
 const KEY_V1 = 'bba_save_v1';
@@ -107,6 +111,7 @@ function createDefaultSave(): SaveData {
     mobileTouchScale: 1,
     mobileHaptics: true,
     mobileOnboardingSeen: false,
+    medalScale: 2,
   };
 }
 
@@ -185,13 +190,16 @@ function mergeProgress(local: SaveData, cloud: Partial<SaveData>): SaveData {
   // Last-played: take the later date.
   if (cloud.dailyLastPlayed && cloud.dailyLastPlayed > local.dailyLastPlayed) out.dailyLastPlayed = cloud.dailyLastPlayed;
   if (cloud.lastSessionDate && cloud.lastSessionDate > local.lastSessionDate) out.lastSessionDate = cloud.lastSessionDate;
-  // Per-level bests: keep the max for each entry; union of keys.
-  if (cloud.bestTour) {
+  // Per-level bests: keep the max for each entry; union of keys. Cloud saves
+  // from the cumulative-medal era (medalScale < 2) are skipped — their
+  // bestTour/medal values are on an incomparable scale (see load()).
+  const cloudMedalsComparable = (cloud.medalScale ?? 0) >= 2;
+  if (cloud.bestTour && cloudMedalsComparable) {
     const merged = { ...local.bestTour };
     for (const k in cloud.bestTour) merged[k] = Math.max(merged[k] || 0, cloud.bestTour[k]);
     out.bestTour = merged;
   }
-  if (cloud.medals) {
+  if (cloud.medals && cloudMedalsComparable) {
     const merged = { ...local.medals };
     for (const k in cloud.medals) {
       const cv = cloud.medals[k] as MedalTier;
@@ -278,6 +286,16 @@ export const Storage: {
         if (typeof this.data.mobileTouchScale !== 'number' || !isFinite(this.data.mobileTouchScale)) this.data.mobileTouchScale = 1;
         if (typeof this.data.mobileHaptics !== 'boolean') this.data.mobileHaptics = true;
         if (typeof this.data.mobileOnboardingSeen !== 'boolean') this.data.mobileOnboardingSeen = false;
+        // Medal recalibration: saves written before the per-level scoring
+        // change hold cumulative-run bests that would read as instant golds
+        // against the new per-level targets. Reset them once; level unlocks
+        // and every other stat are untouched.
+        if ((parsed?.medalScale ?? 0) < 2) {
+          this.data.bestTour = {};
+          this.data.medals = {};
+          this.data.medalScale = 2;
+          this.save();
+        }
         return this.data;
       }
       const rawV1 = localStorage.getItem(KEY_V1);

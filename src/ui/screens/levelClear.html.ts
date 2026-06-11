@@ -264,7 +264,7 @@ export function buildBossDefeated(_game: Game): HTMLElement {
   card.className = 'overlay-card';
   card.innerHTML = `
     <h2 class="ui-heading ui-heading--display ui-heading--win overlay-card__title">Boss Defeated!</h2>
-    <div class="overlay-card__sub">Stand by…</div>
+    <div class="overlay-card__sub">Commander RIFT goes down in flames.</div>
   `;
   card.appendChild(confettiLayer(30));
   root.appendChild(card);
