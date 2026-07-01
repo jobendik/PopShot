@@ -9,8 +9,10 @@ import type { Game } from '../game';
 /** True if a point-ish rect (x±w/2, y..y+h) overlaps any solid platform. */
 function hitsPlatformRect(game: Game, x: number, y: number, w: number, h: number) {
   for (const p of game.platforms) {
-    if (p.blocksShots && x + w / 2 >= p.x && x - w / 2 <= p.x + p.w
-        && y + h >= p.y && y <= p.y + p.h) return true;
+    if (!p.blocksShots) continue;
+    const overlapsX = x + w / 2 >= p.x && x - w / 2 <= p.x + p.w;
+    const overlapsY = y + h >= p.y && y <= p.y + p.h;
+    if (overlapsX && overlapsY) return true;
   }
   return false;
 }
@@ -174,6 +176,7 @@ export class Projectile {
       this.x += (this.vx || 0) * dt;
       this.y += this.vy * dt;
       if (this.y < CEILING_Y || this.x < WALL_L || this.x > WALL_R) this.dead = true;
+      else if (hitsPlatformRect(game, this.x, this.y, this.w, this.h || 10)) this.dead = true;
     } else if (this.type === 'laser') {
       this.life -= dt;
       if (this.life <= 0) this.dead = true;
@@ -184,6 +187,7 @@ export class Projectile {
       this.vy += 100 * dt; // deceleration
       this.r += 30 * dt;
       if (this.life <= 0 || this.y < CEILING_Y) this.dead = true;
+      else if (hitsPlatformCircle(game, this.x, this.y, this.r)) this.dead = true;
     } else if (this.type === 'shuriken') {
       this.life -= dt;
       this.x += this.vx * dt;
@@ -200,13 +204,24 @@ export class Projectile {
         this.bounces--;
       }
       if (this.life <= 0 || this.y > game.canvas.height || this.y < CEILING_Y - 30 || this.x < WALL_L - 30 || this.x > WALL_R + 30) this.dead = true;
+      else if (hitsPlatformCircle(game, this.x, this.y, this.r)) {
+        // Shurikens bounce off walls/ceiling — bounce off solid platforms too
+        // (from below) instead of passing straight through them.
+        if (this.bounces > 0) {
+          this.vy = -Math.abs(this.vy) * 0.75;
+          this.bounces--;
+        } else {
+          this.dead = true;
+        }
+      }
     } else if (this.type === 'bomb') {
       this.life -= dt;
       this.x += this.vx * dt;
       this.y += this.vy * dt;
       this.vy += 520 * dt;
-      if (this.y <= CEILING_Y || this.life <= 0) game.explodeProjectile(this, this.x, this.y);
-      else if (this.y > game.canvas.height) this.dead = true;
+      if (this.y <= CEILING_Y || this.life <= 0 || hitsPlatformCircle(game, this.x, this.y, this.r)) {
+        game.explodeProjectile(this, this.x, this.y);
+      } else if (this.y > game.canvas.height) this.dead = true;
     } else if (this.type === 'grapple') {
       if (!this.anchored) {
         this.tipY -= this.speed * dt;
@@ -233,6 +248,8 @@ export class Projectile {
       // Light gravity so the bolt arcs slightly — sells the "thrown" feel.
       this.vy += 220 * dt;
       if (this.y < CEILING_Y || this.x < WALL_L || this.x > WALL_R || this.y > game.canvas.height) {
+        this.dead = true;
+      } else if (hitsPlatformCircle(game, this.x, this.y, 8)) {
         this.dead = true;
       }
     }
