@@ -6,7 +6,15 @@ import { clamp } from '../utils';
 import { roundRect } from '../rendering/canvas';
 import { Particle } from './particle';
 import { Projectile } from './projectile';
-import { drawBot, ROBOT_P2_PALETTE, ROBOT_MUZZLE_LOCAL_Y } from './robot';
+import { drawBot, ROBOT_P2_PALETTE, ROBOT_P3_PALETTE, ROBOT_P4_PALETTE, ROBOT_MUZZLE_LOCAL_Y, type RobotPalette } from './robot';
+
+// P1 uses the equipped/owned palette (see draw() below); P2-P4 get fixed,
+// visually distinct skins so all four players are readable at a glance.
+const PLAYER_PALETTES: Record<number, RobotPalette | undefined> = {
+  2: ROBOT_P2_PALETTE,
+  3: ROBOT_P3_PALETTE,
+  4: ROBOT_P4_PALETTE,
+};
 import type { Game } from '../game';
 
 // Visual scale of the treaded robot relative to its native size. Tuned so the
@@ -24,7 +32,9 @@ export class Player {
   vx: number;
   speed: number;
   facing: number;
-  isP2: boolean;
+  /** 1-4. Drives keyboard/gamepad input mapping and the visual palette
+   *  (P1 uses the equipped/owned palette; P2-P4 get fixed distinct skins). */
+  playerNum: number;
   weapon: WeaponType;
   weaponAmmo: number;
   weaponTime: number;
@@ -51,13 +61,13 @@ export class Player {
   /** Seconds since the last successful pop, or <0 for none. Drives the happy
    *  eye-squint + little hop. */
   cheerT: number;
-  constructor(x, y, isP2 = false) {
+  constructor(x, y, playerNum = 1) {
     this.x = x; this.y = y;
     this.w = 30; this.h = 46;
     this.vx = 0;
     this.speed = 320;
     this.facing = 1;
-    this.isP2 = isP2;
+    this.playerNum = playerNum;
 
     // Weapon state
     this.weapon = 'harpoon';
@@ -103,11 +113,35 @@ export class Player {
   update(dt, game) {
     if (this.dead) return;
 
-    // Input mapping (P1 = WASD/arrows + Space, P2 = JKL + I/U)
-    const left  = this.isP2 ? keys.KeyJ : (keys.KeyA || keys.ArrowLeft);
-    const right = this.isP2 ? keys.KeyL : (keys.KeyD || keys.ArrowRight);
-    const shoot = this.isP2 ? (keys.KeyI || keys.KeyU || keys.KeyK)
-                            : (keys.Space || keys.KeyW || keys.ArrowUp);
+    // Input mapping:
+    //   P1 = WASD/Arrows + Space (+ its own gamepad)
+    //   P2 = J/L + I/U/K          (+ its own gamepad)
+    //   P3 = A/S/D/W ("ASDW")     (+ its own gamepad)
+    //   P4 = L/K/J/I ("LKJI")     (+ its own gamepad)
+    // P3/P4's keyboard letters are literally the same physical keys P1/P2
+    // already use (A/D/W and J/L/I respectively) — on a single keyboard
+    // those pairs will always move together. Each of P3/P4's OWN gamepad
+    // (3rd/4th controller) drives dedicated synthetic keys (Gamepad3*/
+    // Gamepad4* in systems/input.ts) so plugging in more controllers still
+    // gives four fully independent players.
+    let left: boolean, right: boolean, shoot: boolean;
+    if (this.playerNum === 2) {
+      left = keys.KeyJ;
+      right = keys.KeyL;
+      shoot = keys.KeyI || keys.KeyU || keys.KeyK;
+    } else if (this.playerNum === 3) {
+      left = keys.KeyA || keys.Gamepad3Left;
+      right = keys.KeyD || keys.Gamepad3Right;
+      shoot = keys.KeyW || keys.Gamepad3Shoot;
+    } else if (this.playerNum === 4) {
+      left = keys.KeyJ || keys.Gamepad4Left;
+      right = keys.KeyL || keys.Gamepad4Right;
+      shoot = keys.KeyI || keys.Gamepad4Shoot;
+    } else {
+      left = keys.KeyA || keys.ArrowLeft;
+      right = keys.KeyD || keys.ArrowRight;
+      shoot = keys.Space || keys.KeyW || keys.ArrowUp;
+    }
 
     // Horizontal movement with friction
     let inSlime = false;
@@ -338,7 +372,7 @@ export class Player {
     drawBot(ctx, this.x, this.y, {
       facing: this.facing, t: this.animT, vx: this.vx, dist: this.dist,
       fireT: this.fireT, cheerT: this.cheerT,
-      pal: this.isP2 ? ROBOT_P2_PALETTE : equippedPalette().colors,
+      pal: PLAYER_PALETTES[this.playerNum] || equippedPalette().colors,
       scale: ROBOT_SCALE,
     });
 

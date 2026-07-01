@@ -205,11 +205,11 @@ export function resolveCollisions(game: Game) {
   }
 
   // ---- Co-op revive (Pang Adventures): living player stands over downed teammate ----
-  const all = [game.player, game.player2].filter(Boolean) as ReturnType<Game['getLivingPlayers']>;
+  const all = game.getAllPlayers();
   for (const a of all) {
-    if (!a || a.dead) continue;
+    if (a.dead) continue;
     for (const b of all) {
-      if (!b || b === a || !b.dead || b.respawnTimer <= 0) continue;
+      if (b === a || !b.dead || b.respawnTimer <= 0) continue;
       const dx = a.x - b.x, dy = a.y - b.y;
       if (dx * dx + dy * dy < 36 * 36) {
         game.respawnPlayer(b);

@@ -89,6 +89,8 @@ export class Game {
   unlockedLevel: number;
   player: Player | null;
   player2: Player | null;
+  player3: Player | null;
+  player4: Player | null;
   balls: Ball[];
   projectiles: Projectile[];
   pickups: Pickup[];
@@ -207,6 +209,8 @@ export class Game {
 
     this.player = null;
     this.player2 = null;
+    this.player3 = null;
+    this.player4 = null;
     this.balls = [];
     this.projectiles = [];
     this.pickups = [];
@@ -389,6 +393,8 @@ export class Game {
     this.panicStarTimer = 22;
     this.player = new Player(W / 2, GROUND_Y - 0);
     this.player2 = null;
+    this.player3 = null;
+    this.player4 = null;
     this.boss = null;
     this.bossLevel = false;
     this.state = State.PLAYING;
@@ -503,7 +509,15 @@ export class Game {
     // intro banner) can never be an instant unfair death — e.g. a ball path
     // or a big_bubbles-modified spawn crossing the player's start position.
     this.player.invuln = 1.5;
-    this.player2 = null;
+    // Preserve any already-joined co-op players across a level transition
+    // (retry, advance, boss rush step, etc.) instead of silently booting them
+    // — previously every loadLevel() call reset player2 to null, so a joined
+    // Player 2/3/4 would vanish the moment the level advanced and had to
+    // rejoin by pressing their fire key again. Respawn them fresh (full
+    // spawn invuln, harpoon weapon) at their usual slot instead.
+    if (this.player2) { this.player2 = new Player(W / 2 + 64, GROUND_Y, 2); this.player2.invuln = 1.5; }
+    if (this.player3) { this.player3 = new Player(W / 2 - 128, GROUND_Y, 3); this.player3.invuln = 1.5; }
+    if (this.player4) { this.player4 = new Player(W / 2 + 128, GROUND_Y, 4); this.player4.invuln = 1.5; }
     this.boss = L.boss ? new Boss() : null;
     this.state = State.PLAYING;
 
@@ -522,8 +536,12 @@ export class Game {
   // ============================ HELPERS ============================
   addScore(n: number) { this.score += n; }
 
+  getAllPlayers() {
+    return [this.player, this.player2, this.player3, this.player4].filter((p): p is Player => !!p);
+  }
+
   getLivingPlayers() {
-    return [this.player, this.player2].filter((p): p is Player => !!p && !p.dead);
+    return this.getAllPlayers().filter(p => !p.dead);
   }
 
   /** Hurtbox used for ball/hazard/crab/boss collisions. Tiny-hurtbox modifier
@@ -539,14 +557,31 @@ export class Game {
 
   joinPlayer2() {
     if (this.player2 || this.state !== State.PLAYING) return;
-    this.player2 = new Player(W / 2 + 64, GROUND_Y, true);
+    this.player2 = new Player(W / 2 + 64, GROUND_Y, 2);
     this.player2.invuln = 2;
     this.floatingTexts.push(new FloatingText(W / 2, H / 2 + 46, 'PLAYER 2 JOINED', '#9be7ff', 24));
     AudioSys.pickup();
   }
 
+  joinPlayer3() {
+    if (this.player3 || this.state !== State.PLAYING) return;
+    this.player3 = new Player(W / 2 - 128, GROUND_Y, 3);
+    this.player3.invuln = 2;
+    this.floatingTexts.push(new FloatingText(W / 2, H / 2 + 46, 'PLAYER 3 JOINED', '#ffd166', 24));
+    AudioSys.pickup();
+  }
+
+  joinPlayer4() {
+    if (this.player4 || this.state !== State.PLAYING) return;
+    this.player4 = new Player(W / 2 + 128, GROUND_Y, 4);
+    this.player4.invuln = 2;
+    this.floatingTexts.push(new FloatingText(W / 2, H / 2 + 46, 'PLAYER 4 JOINED', '#e0b3ff', 24));
+    AudioSys.pickup();
+  }
+
   respawnPlayer(player: Player) {
-    player.x = player.isP2 ? W / 2 + 64 : W / 2 - 64;
+    const spawnX: Record<number, number> = { 1: W / 2 - 64, 2: W / 2 + 64, 3: W / 2 - 128, 4: W / 2 + 128 };
+    player.x = spawnX[player.playerNum] ?? W / 2;
     player.y = GROUND_Y;
     player.vx = 0;
     player.dead = false;

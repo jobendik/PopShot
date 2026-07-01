@@ -63,6 +63,8 @@ export function renderControls(game: Game) {
     'Menu Confirm   Enter',
     'Co-op: P2 Join  I  /  K  /  U',
     'Co-op: P2 Move  J  /  L',
+    'Co-op: P3 Join/Move  W  /  A D',
+    'Co-op: P4 Join/Move  I  /  J L',
     'Co-op: Revive   Walk over a downed P',
   ];
   ctx.font = '15px sans-serif';

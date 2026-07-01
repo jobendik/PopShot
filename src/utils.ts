@@ -22,6 +22,19 @@ export function rectOverlap(a, b) {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
 
+/** True if a point moving vertically from y0 to y1 (in either direction), at
+ *  horizontal position x with half-width padding, sweeps through an
+ *  axis-aligned rect. Unlike a single end-of-frame point/circle check, this
+ *  catches fast-moving projectiles/balls whose per-frame step is larger than
+ *  a thin platform is thick — without it, a shot can "teleport" from one
+ *  side of a platform to the other within a single physics tick and never
+ *  register a hit. */
+export function sweepHitsRect(x: number, y0: number, y1: number, halfW: number, rx: number, ry: number, rw: number, rh: number): boolean {
+  if (x + halfW < rx || x - halfW > rx + rw) return false;
+  const top = Math.min(y0, y1), bottom = Math.max(y0, y1);
+  return bottom >= ry && top <= ry + rh;
+}
+
 /** Compact number formatter for stat readouts — 12480 → "12.5k", 2_400_000 → "2.4m". */
 export function fmtCompact(n: number): string {
   if (n < 1000) return String(n);

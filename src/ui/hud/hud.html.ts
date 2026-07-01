@@ -17,6 +17,7 @@
 
 import { State, type GameState } from '../../constants';
 import { AudioSys } from '../../systems/audio';
+import { LEVELS } from '../../data/levels';
 import type { Game } from '../../game';
 
 const HUD_STATES: ReadonlySet<GameState> = new Set([
@@ -90,7 +91,7 @@ export function buildHUD(game: Game): HTMLElement {
           <span class="hud__weapon-ammo" data-role="weapon-ammo"></span>
           <span class="hud__shield-chip" data-role="shield" hidden>● SHIELD</span>
         </div>
-        <div class="hud__p2" data-role="p2" hidden></div>
+        <div class="hud__p2" data-role="coop" hidden></div>
       </div>
       <div class="hud__center">
         <div class="hud__timer-wrap" data-role="timer-wrap">
@@ -151,7 +152,7 @@ export function buildHUD(game: Game): HTMLElement {
     bossWrap:     root.querySelector('[data-role="boss"]') as HTMLElement,
     bossLabel:    root.querySelector('[data-role="boss-label"]') as HTMLElement,
     bossFill:     root.querySelector('[data-role="boss-fill"]') as HTMLElement,
-    p2:           root.querySelector('[data-role="p2"]') as HTMLElement,
+    p2:           root.querySelector('[data-role="coop"]') as HTMLElement,
   };
 
   refs.pauseBtn.addEventListener('click', () => {
@@ -274,10 +275,13 @@ export function syncHUD(game: Game) {
     cached.lives = game.lives;
   }
 
-  // ---- Level name ----
-  if (game.levelName !== cached.levelName) {
-    refs.levelName.textContent = game.levelName;
-    cached.levelName = game.levelName;
+  // ---- Level name (+ level number for numbered Tour stages) ----
+  const levelLabel = (game.mode === 'tour' || game.mode === 'daily')
+    ? 'LEVEL ' + (game.levelIndex + 1) + '/' + LEVELS.length + '  ' + game.levelName
+    : game.levelName;
+  if (levelLabel !== cached.levelName) {
+    refs.levelName.textContent = levelLabel;
+    cached.levelName = levelLabel;
   }
 
   // ---- Boss bar ----
@@ -294,14 +298,18 @@ export function syncHUD(game: Game) {
     }
   }
 
-  // ---- P2 chip ----
-  const p2Status = !game.player2 ? '' :
-    game.player2.dead ? 'P2 RESPAWN ' + Math.ceil(game.player2.respawnTimer)
-                      : 'P2 ' + game.player2.weapon.toUpperCase();
-  if (p2Status !== cached.p2Status) {
-    refs.p2.hidden = !p2Status;
-    if (p2Status) refs.p2.textContent = p2Status;
-    cached.p2Status = p2Status;
+  // ---- Co-op chip(s): one line per joined Player 2/3/4 ----
+  const coopParts: string[] = [];
+  for (const [num, p] of [[2, game.player2], [3, game.player3], [4, game.player4]] as const) {
+    if (!p) continue;
+    coopParts.push(p.dead ? 'P' + num + ' RESPAWN ' + Math.ceil(p.respawnTimer)
+                          : 'P' + num + ' ' + p.weapon.toUpperCase());
+  }
+  const coopStatus = coopParts.join('   ');
+  if (coopStatus !== cached.p2Status) {
+    refs.p2.hidden = !coopStatus;
+    if (coopStatus) refs.p2.textContent = coopStatus;
+    cached.p2Status = coopStatus;
   }
 
   // ---- Effect chips ----

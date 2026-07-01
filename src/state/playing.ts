@@ -25,8 +25,24 @@ export function updatePlaying(game: Game, dt: number) {
     game.state = State.PAUSED; AudioSys.menu(); return;
   }
   // Local co-op is a desktop-only feature (touch UI is single-player).
+  // Each player joins on their own fire-key press: P2 = I/U/K, P3 = W (or its
+  // dedicated 3rd-controller button), P4 = I (or its dedicated 4th-controller
+  // button). Note P3/P4's keyboard letters are literally shared with P1/P2's
+  // (ASDW / LKJI as requested) — on a single physical keyboard those pairs
+  // move together, but a 3rd/4th gamepad gives P3/P4 fully independent input.
+  // Because KeyI is P2's join key too, pressing I before P2 has joined always
+  // joins P2 first (the P2 check runs first and consumes the press) — P4
+  // only joins via keyboard once P2 already exists, or at any time via its
+  // own (4th) gamepad. This is an unavoidable consequence of reusing P2's
+  // letters for P4 as requested, not an ordering bug.
   if (!isTouchDevice && !game.player2 && (consumePressed('KeyI') || consumePressed('KeyK') || consumePressed('KeyU'))) {
     game.joinPlayer2();
+  }
+  if (!isTouchDevice && !game.player3 && (consumePressed('KeyW') || consumePressed('Gamepad3Shoot'))) {
+    game.joinPlayer3();
+  }
+  if (!isTouchDevice && !game.player4 && (consumePressed('KeyI') || consumePressed('Gamepad4Shoot'))) {
+    game.joinPlayer4();
   }
   // Restart
   if (consumePressed('KeyR')) {
@@ -59,7 +75,11 @@ export function updatePlaying(game: Game, dt: number) {
     }
     if (game.timer <= 0) {
       game.timer = 0;
-      if (game.player) game.killPlayer(game.player, 'timeout');
+      // Timeout ends the round for the whole team at once. Previously only
+      // Player 1 was killed here, so in co-op any other still-living player
+      // just kept playing on a frozen zero timer instead of the round
+      // actually ending (or properly resetting once lives ran out).
+      for (const p of game.getLivingPlayers()) game.killPlayer(p, 'timeout');
       return;
     }
   }
@@ -153,8 +173,7 @@ export function updatePlaying(game: Game, dt: number) {
   // jittering until respawn.
 
   // --- Entity updates ---
-  for (const p of [game.player, game.player2]) {
-    if (!p) continue;
+  for (const p of game.getAllPlayers()) {
     if (p.dead && p.respawnTimer > 0) {
       p.respawnTimer -= dt;
       if (p.respawnTimer <= 0 && game.lives > 0) game.respawnPlayer(p);
@@ -262,13 +281,13 @@ export function renderWorld(game: Game) {
   if (game.boss) game.boss.draw(ctx);
   for (const b of game.balls) b.draw(ctx);
   for (const p of game.projectiles) p.draw(ctx);
-  if (game.player) game.player.draw(ctx);
-  if (game.player2) game.player2.draw(ctx);
+  for (const p of game.getAllPlayers()) p.draw(ctx);
   // Downed-player marker — drawn ONLY in co-op, when one player is dead but
   // their revive window is still open. Standing over the prompt revives them.
-  if (game.player && game.player2) {
-    for (const p of [game.player, game.player2]) {
-      if (p && p.dead && p.respawnTimer > 0.05) {
+  const allPlayers = game.getAllPlayers();
+  if (allPlayers.length > 1) {
+    for (const p of allPlayers) {
+      if (p.dead && p.respawnTimer > 0.05) {
         const blink = 0.5 + Math.abs(Math.sin(performance.now() / 200)) * 0.5;
         ctx.save();
         ctx.globalAlpha = blink;
