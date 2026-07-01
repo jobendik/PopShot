@@ -389,7 +389,14 @@ export function killPlayer(game: Game, player: Player, reason: DeathReason = 'un
   if (game.lives > 0) {
     FX.toast('danger', 'LIFE LOST', game.lives + ' remaining');
   }
-  if (game.lives <= 0) {
+  // In co-op, lives are a shared pool, but the run must not end just
+  // because ONE partner's death happened to be the one that drained the
+  // last life — that would take control away from a still-standing
+  // teammate (i.e. "player 1 dies -> player 2 dies too"). Only end the run
+  // once every player is actually down.
+  const partner = player.isP2 ? game.player : game.player2;
+  const partnerAlive = !!partner && !partner.dead;
+  if (game.lives <= 0 && !partnerAlive) {
     emit('run.fail', { mode: game.mode, level: game.levelIndex, score: game.score, reason });
     advanceMissions('score', 1, game.score);
     // Daily challenge: any failed run is still a logged attempt; go to the result screen.
@@ -402,12 +409,21 @@ export function killPlayer(game: Game, player: Player, reason: DeathReason = 'un
     }
     game.state = State.GAME_OVER;
     game.saveRunBest();
-  } else if (game.player2) {
+  } else if (partnerAlive) {
     // Pang Adventures revive window: 10 seconds for the partner to walk over
-    // the downed player to bring them back. After that, normal respawn.
-    player.respawnTimer = 10.0;
-    game.floatingTexts.push(new FloatingText(player.x, player.y - 42,
-      (player.isP2 ? 'P2 DOWN' : 'P1 DOWN') + ' — REVIVE!', '#ff4d6d', 20));
+    // the downed player to bring them back. After that, normal respawn —
+    // unless the shared life pool is already spent, in which case this
+    // player stays down for the rest of the run while their teammate keeps
+    // playing solo.
+    if (game.lives > 0) {
+      player.respawnTimer = 10.0;
+      game.floatingTexts.push(new FloatingText(player.x, player.y - 42,
+        (player.isP2 ? 'P2 DOWN' : 'P1 DOWN') + ' — REVIVE!', '#ff4d6d', 20));
+    } else {
+      player.respawnTimer = 0;
+      game.floatingTexts.push(new FloatingText(player.x, player.y - 42,
+        (player.isP2 ? 'P2' : 'P1') + ' OUT OF LIVES', '#ff4d6d', 20));
+    }
   } else {
     game.state = State.PLAYER_DEAD;
     game.hitPause = 1.2;

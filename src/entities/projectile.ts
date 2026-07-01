@@ -1,10 +1,27 @@
 import { CEILING_Y, WALL_L, WALL_R } from '../constants';
-import { clamp, rand } from '../utils';
+import { clamp, collideCircleRect, rand } from '../utils';
 import { roundRect } from '../rendering/canvas';
 import { INK, PAL } from '../rendering/theme';
 import type { Ball } from './ball';
 import type { Player } from './player';
 import type { Game } from '../game';
+
+/** True if a point-ish rect (x±w/2, y..y+h) overlaps any solid platform. */
+function hitsPlatformRect(game: Game, x: number, y: number, w: number, h: number) {
+  for (const p of game.platforms) {
+    if (p.blocksShots && x + w / 2 >= p.x && x - w / 2 <= p.x + p.w
+        && y + h >= p.y && y <= p.y + p.h) return true;
+  }
+  return false;
+}
+
+/** True if a circular projectile overlaps any solid platform. */
+function hitsPlatformCircle(game: Game, x: number, y: number, r: number) {
+  for (const p of game.platforms) {
+    if (p.blocksShots && collideCircleRect(x, y, r, p.x, p.y, p.w, p.h)) return true;
+  }
+  return false;
+}
 
 /** Shared barbed harpoon head, pointing straight up, tip at (x, tipY). Used by
  *  the harpoon, the (travelling) power wire, so every spear in the game has the
