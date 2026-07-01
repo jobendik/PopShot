@@ -30,6 +30,11 @@ export function updatePlaying(game: Game, dt: number) {
   // button). Note P3/P4's keyboard letters are literally shared with P1/P2's
   // (ASDW / LKJI as requested) — on a single physical keyboard those pairs
   // move together, but a 3rd/4th gamepad gives P3/P4 fully independent input.
+  // Because KeyI is P2's join key too, pressing I before P2 has joined always
+  // joins P2 first (the P2 check runs first and consumes the press) — P4
+  // only joins via keyboard once P2 already exists, or at any time via its
+  // own (4th) gamepad. This is an unavoidable consequence of reusing P2's
+  // letters for P4 as requested, not an ordering bug.
   if (!isTouchDevice && !game.player2 && (consumePressed('KeyI') || consumePressed('KeyK') || consumePressed('KeyU'))) {
     game.joinPlayer2();
   }
