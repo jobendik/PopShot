@@ -46,6 +46,12 @@ let canvasEl: HTMLCanvasElement | null = null;
 let _autoFireActive = false;
 
 const GAMEPAD_AXIS_DEADZONE = 0.35;
+// Player 1's controller drives the same synthetic keys as the keyboard's
+// arrows/Space/etc. Player 2's controller drives the JKL(+I/U) keys that
+// entities/player.ts already reads for local co-op — see the isP2 branch
+// there. Keeping two separate state maps means a controller unplugging (or
+// simply not being present) only releases the keys IT was holding, never
+// the other player's.
 const gamepadKeyState: Record<string, boolean> = {
   ArrowLeft: false,
   ArrowRight: false,
@@ -56,6 +62,11 @@ const gamepadKeyState: Record<string, boolean> = {
   KeyP: false,
   KeyR: false,
   KeyM: false,
+};
+const gamepad2KeyState: Record<string, boolean> = {
+  KeyJ: false,
+  KeyL: false,
+  KeyI: false,
 };
 
 function applySyntheticKey(code: string, held: boolean, sourceState: Record<string, boolean>) {
@@ -73,14 +84,20 @@ function releaseSyntheticKeys(sourceState: Record<string, boolean>) {
   for (const code in sourceState) applySyntheticKey(code, false, sourceState);
 }
 
-function getPrimaryGamepad(): Gamepad | null {
-  if (typeof navigator === 'undefined' || typeof navigator.getGamepads !== 'function') return null;
+/** All connected gamepads, ordered by their stable browser-assigned index
+ *  (not by array slot, which can contain gaps once a pad disconnects). The
+ *  first entry drives Player 1, the second drives Player 2 — this lets two
+ *  PS5 (or any standard-mapping) controllers play local co-op together. */
+function getConnectedGamepads(): Gamepad[] {
+  if (typeof navigator === 'undefined' || typeof navigator.getGamepads !== 'function') return [];
   const pads = navigator.getGamepads();
+  const connected: Gamepad[] = [];
   for (let i = 0; i < pads.length; i++) {
     const pad = pads[i];
-    if (pad?.connected) return pad;
+    if (pad?.connected) connected.push(pad);
   }
-  return null;
+  connected.sort((a, b) => a.index - b.index);
+  return connected;
 }
 
 function toCanvasCoords(clientX: number, clientY: number) {
@@ -301,41 +318,69 @@ export function tickAutoFire(game: Game) {
 
 /** Poll the browser Gamepad API and synthesize the keyboard codes the rest of
  *  the game already understands. This keeps controller support centralized in
- *  one place instead of teaching every game state about buttons. */
+ *  one place instead of teaching every game state about buttons.
+ *
+ *  Supports two simultaneous controllers for local co-op: the first
+ *  connected pad drives Player 1 (arrows/Space/menu buttons), the second
+ *  drives Player 2 (JKL + I, mirroring the keyboard co-op scheme). Plugging
+ *  in a second PS5/standard-mapping controller while in PLAYING will join
+ *  Player 2 the same way pressing I/K/U on the keyboard does, since both
+ *  paths just set the same synthetic keys. */
 export function tickGamepadInputs(state: GameState) {
-  const pad = getPrimaryGamepad();
-  if (!pad) {
+  const [pad1, pad2] = getConnectedGamepads();
+  let anyActivity = false;
+
+  if (!pad1) {
     releaseSyntheticKeys(gamepadKeyState);
-    return;
+  } else {
+    const axisX = pad1.axes[0] ?? 0;
+    const axisY = pad1.axes[1] ?? 0;
+    const horizontalLeft = axisX <= -GAMEPAD_AXIS_DEADZONE || !!pad1.buttons[14]?.pressed;
+    const horizontalRight = axisX >= GAMEPAD_AXIS_DEADZONE || !!pad1.buttons[15]?.pressed;
+    const verticalEnabled = state !== State.PLAYING;
+    const verticalUp = verticalEnabled && (axisY <= -GAMEPAD_AXIS_DEADZONE || !!pad1.buttons[12]?.pressed);
+    const verticalDown = verticalEnabled && (axisY >= GAMEPAD_AXIS_DEADZONE || !!pad1.buttons[13]?.pressed);
+
+    applySyntheticKey('ArrowLeft', horizontalLeft && !horizontalRight, gamepadKeyState);
+    applySyntheticKey('ArrowRight', horizontalRight && !horizontalLeft, gamepadKeyState);
+    applySyntheticKey('ArrowUp', verticalUp && !verticalDown, gamepadKeyState);
+    applySyntheticKey('ArrowDown', verticalDown && !verticalUp, gamepadKeyState);
+
+    // Standard-mapped PS5/DualSense buttons in browsers:
+    // Cross = 0, Circle = 1, Square = 2, Triangle = 3, Options = 9.
+    applySyntheticKey('Space', !!pad1.buttons[0]?.pressed, gamepadKeyState);
+    applySyntheticKey('Escape', !!pad1.buttons[1]?.pressed, gamepadKeyState);
+    applySyntheticKey('KeyR', !!pad1.buttons[2]?.pressed, gamepadKeyState);
+    applySyntheticKey('KeyM', !!pad1.buttons[3]?.pressed, gamepadKeyState);
+    applySyntheticKey('KeyP', !!pad1.buttons[9]?.pressed, gamepadKeyState);
+
+    if (
+      horizontalLeft || horizontalRight || verticalUp || verticalDown
+      || pad1.buttons[0]?.pressed || pad1.buttons[1]?.pressed || pad1.buttons[2]?.pressed
+      || pad1.buttons[3]?.pressed || pad1.buttons[9]?.pressed
+    ) {
+      anyActivity = true;
+    }
   }
 
-  const axisX = pad.axes[0] ?? 0;
-  const axisY = pad.axes[1] ?? 0;
-  const horizontalLeft = axisX <= -GAMEPAD_AXIS_DEADZONE || !!pad.buttons[14]?.pressed;
-  const horizontalRight = axisX >= GAMEPAD_AXIS_DEADZONE || !!pad.buttons[15]?.pressed;
-  const verticalEnabled = state !== State.PLAYING;
-  const verticalUp = verticalEnabled && (axisY <= -GAMEPAD_AXIS_DEADZONE || !!pad.buttons[12]?.pressed);
-  const verticalDown = verticalEnabled && (axisY >= GAMEPAD_AXIS_DEADZONE || !!pad.buttons[13]?.pressed);
+  if (!pad2) {
+    releaseSyntheticKeys(gamepad2KeyState);
+  } else {
+    const axisX = pad2.axes[0] ?? 0;
+    const horizontalLeft = axisX <= -GAMEPAD_AXIS_DEADZONE || !!pad2.buttons[14]?.pressed;
+    const horizontalRight = axisX >= GAMEPAD_AXIS_DEADZONE || !!pad2.buttons[15]?.pressed;
+    // Cross/Circle/Square (buttons 0/1/2) all fire for P2 — entities/player.ts
+    // treats KeyI, KeyU and KeyK as equivalent P2 fire keys, so any one of
+    // these buttons setting KeyI is enough to trigger (and join) P2.
+    const shoot = !!pad2.buttons[0]?.pressed || !!pad2.buttons[1]?.pressed || !!pad2.buttons[2]?.pressed;
 
-  applySyntheticKey('ArrowLeft', horizontalLeft && !horizontalRight, gamepadKeyState);
-  applySyntheticKey('ArrowRight', horizontalRight && !horizontalLeft, gamepadKeyState);
-  applySyntheticKey('ArrowUp', verticalUp && !verticalDown, gamepadKeyState);
-  applySyntheticKey('ArrowDown', verticalDown && !verticalUp, gamepadKeyState);
+    applySyntheticKey('KeyJ', horizontalLeft && !horizontalRight, gamepad2KeyState);
+    applySyntheticKey('KeyL', horizontalRight && !horizontalLeft, gamepad2KeyState);
+    applySyntheticKey('KeyI', shoot, gamepad2KeyState);
 
-  // Standard-mapped PS5/DualSense buttons in browsers:
-  // Cross = 0, Circle = 1, Square = 2, Triangle = 3, Options = 9.
-  applySyntheticKey('Space', !!pad.buttons[0]?.pressed, gamepadKeyState);
-  applySyntheticKey('Escape', !!pad.buttons[1]?.pressed, gamepadKeyState);
-  applySyntheticKey('KeyR', !!pad.buttons[2]?.pressed, gamepadKeyState);
-  applySyntheticKey('KeyM', !!pad.buttons[3]?.pressed, gamepadKeyState);
-  applySyntheticKey('KeyP', !!pad.buttons[9]?.pressed, gamepadKeyState);
-
-  if (
-    horizontalLeft || horizontalRight || verticalUp || verticalDown
-    || pad.buttons[0]?.pressed || pad.buttons[1]?.pressed || pad.buttons[2]?.pressed
-    || pad.buttons[3]?.pressed || pad.buttons[9]?.pressed
-  ) {
-    AudioSys.init();
+    if (horizontalLeft || horizontalRight || shoot) anyActivity = true;
   }
+
+  if (anyActivity) AudioSys.init();
 }
 

@@ -117,6 +117,23 @@ export function buildControls(): HTMLElement {
     },
     { label: 'P2 Move',       value: 'J / L',            kbd: true },
     { label: 'P2 Fire',       value: 'I or K or U',      kbd: true },
+    {
+      label: 'PS5 P2 Move',
+      value: controllerValue(
+        controllerChip('LS', 'stick'),
+        controllerChip('+', 'dpad'),
+      ),
+      rich: true,
+    },
+    {
+      label: 'PS5 P2 Fire',
+      value: controllerValue(
+        controllerChip('X', 'cross'),
+        controllerChip('O', 'circle'),
+      ),
+      rich: true,
+    },
+    { label: 'PS5 P2 Join',   value: 'Connect 2nd controller' },
   ];
   const rowsEl = root.querySelector<HTMLElement>('[data-role="rows"]')!;
   rowsEl.innerHTML = rowHtml(rows);
