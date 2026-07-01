@@ -118,11 +118,11 @@ export function renderPause(game: Game) {
        'PS5: Left stick / D-pad move  •  Cross shoot'];
   for (let i = 0; i < lines.length; i++) ctx.fillText(lines[i], W/2, 286 + i * 22);
 
-  // P2 hint — desktop only, and only once the player has some experience.
+  // Co-op hint — desktop only, and only once the player has some experience.
   if (!game.player2 && game.unlockedLevel >= 3 && !isTouchDevice) {
     ctx.fillStyle = '#9be7ff';
     ctx.font = '15px sans-serif';
-    ctx.fillText('Two players? Press I / K / U to bring P2 in.', W/2, 286 + lines.length * 22 + 10);
+    ctx.fillText('More players? Press I/K/U (P2), W (P3), or plug in more controllers.', W/2, 286 + lines.length * 22 + 10);
   }
 
   // Reduced-motion accessibility toggle.

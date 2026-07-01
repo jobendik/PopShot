@@ -47,11 +47,15 @@ let _autoFireActive = false;
 
 const GAMEPAD_AXIS_DEADZONE = 0.35;
 // Player 1's controller drives the same synthetic keys as the keyboard's
-// arrows/Space/etc. Player 2's controller drives the JKL(+I/U) keys that
-// entities/player.ts already reads for local co-op — see the isP2 branch
-// there. Keeping two separate state maps means a controller unplugging (or
+// arrows/Space/etc. Player 2's controller drives the JKL(+I) keys that
+// entities/player.ts already reads for local co-op. Players 3 and 4 don't
+// have dedicated physical keyboard keys of their own (their keyboard
+// fallback — A/S/D/W and L/K/J/I — literally reuses P1's/P2's keys), so
+// their gamepads instead drive dedicated synthetic codes (Gamepad3*/
+// Gamepad4*) that entities/player.ts reads in addition to the keyboard
+// letters. Keeping one state map per pad means a controller unplugging (or
 // simply not being present) only releases the keys IT was holding, never
-// the other player's.
+// another player's.
 const gamepadKeyState: Record<string, boolean> = {
   ArrowLeft: false,
   ArrowRight: false,
@@ -67,6 +71,16 @@ const gamepad2KeyState: Record<string, boolean> = {
   KeyJ: false,
   KeyL: false,
   KeyI: false,
+};
+const gamepad3KeyState: Record<string, boolean> = {
+  Gamepad3Left: false,
+  Gamepad3Right: false,
+  Gamepad3Shoot: false,
+};
+const gamepad4KeyState: Record<string, boolean> = {
+  Gamepad4Left: false,
+  Gamepad4Right: false,
+  Gamepad4Shoot: false,
 };
 
 function applySyntheticKey(code: string, held: boolean, sourceState: Record<string, boolean>) {
@@ -86,8 +100,9 @@ function releaseSyntheticKeys(sourceState: Record<string, boolean>) {
 
 /** All connected gamepads, ordered by their stable browser-assigned index
  *  (not by array slot, which can contain gaps once a pad disconnects). The
- *  first entry drives Player 1, the second drives Player 2 — this lets two
- *  PS5 (or any standard-mapping) controllers play local co-op together. */
+ *  first entry drives Player 1, the second Player 2, the third Player 3, and
+ *  the fourth Player 4 — this lets up to four standard-mapping controllers
+ *  (e.g. PS5/DualSense) play local co-op together. */
 function getConnectedGamepads(): Gamepad[] {
   if (typeof navigator === 'undefined' || typeof navigator.getGamepads !== 'function') return [];
   const pads = navigator.getGamepads();
@@ -320,14 +335,16 @@ export function tickAutoFire(game: Game) {
  *  the game already understands. This keeps controller support centralized in
  *  one place instead of teaching every game state about buttons.
  *
- *  Supports two simultaneous controllers for local co-op: the first
+ *  Supports up to four simultaneous controllers for local co-op: the first
  *  connected pad drives Player 1 (arrows/Space/menu buttons), the second
- *  drives Player 2 (JKL + I, mirroring the keyboard co-op scheme). Plugging
- *  in a second PS5/standard-mapping controller while in PLAYING will join
- *  Player 2 the same way pressing I/K/U on the keyboard does, since both
- *  paths just set the same synthetic keys. */
+ *  drives Player 2 (JKL + I, mirroring the keyboard co-op scheme), and the
+ *  third/fourth drive Players 3/4 via dedicated synthetic keys (see
+ *  entities/player.ts). Plugging in a second PS5/standard-mapping controller
+ *  while in PLAYING will join Player 2 the same way pressing I/K/U on the
+ *  keyboard does, since both paths just set the same synthetic keys — and
+ *  likewise for a third/fourth controller joining Players 3/4. */
 export function tickGamepadInputs(state: GameState) {
-  const [pad1, pad2] = getConnectedGamepads();
+  const [pad1, pad2, pad3, pad4] = getConnectedGamepads();
   let anyActivity = false;
 
   if (!pad1) {
@@ -381,6 +398,37 @@ export function tickGamepadInputs(state: GameState) {
     if (horizontalLeft || horizontalRight || shoot) anyActivity = true;
   }
 
+  if (!pad3) {
+    releaseSyntheticKeys(gamepad3KeyState);
+  } else {
+    const axisX = pad3.axes[0] ?? 0;
+    const horizontalLeft = axisX <= -GAMEPAD_AXIS_DEADZONE || !!pad3.buttons[14]?.pressed;
+    const horizontalRight = axisX >= GAMEPAD_AXIS_DEADZONE || !!pad3.buttons[15]?.pressed;
+    const shoot = !!pad3.buttons[0]?.pressed || !!pad3.buttons[1]?.pressed || !!pad3.buttons[2]?.pressed;
+
+    applySyntheticKey('Gamepad3Left', horizontalLeft && !horizontalRight, gamepad3KeyState);
+    applySyntheticKey('Gamepad3Right', horizontalRight && !horizontalLeft, gamepad3KeyState);
+    applySyntheticKey('Gamepad3Shoot', shoot, gamepad3KeyState);
+
+    if (horizontalLeft || horizontalRight || shoot) anyActivity = true;
+  }
+
+  if (!pad4) {
+    releaseSyntheticKeys(gamepad4KeyState);
+  } else {
+    const axisX = pad4.axes[0] ?? 0;
+    const horizontalLeft = axisX <= -GAMEPAD_AXIS_DEADZONE || !!pad4.buttons[14]?.pressed;
+    const horizontalRight = axisX >= GAMEPAD_AXIS_DEADZONE || !!pad4.buttons[15]?.pressed;
+    const shoot = !!pad4.buttons[0]?.pressed || !!pad4.buttons[1]?.pressed || !!pad4.buttons[2]?.pressed;
+
+    applySyntheticKey('Gamepad4Left', horizontalLeft && !horizontalRight, gamepad4KeyState);
+    applySyntheticKey('Gamepad4Right', horizontalRight && !horizontalLeft, gamepad4KeyState);
+    applySyntheticKey('Gamepad4Shoot', shoot, gamepad4KeyState);
+
+    if (horizontalLeft || horizontalRight || shoot) anyActivity = true;
+  }
+
   if (anyActivity) AudioSys.init();
 }
+
 

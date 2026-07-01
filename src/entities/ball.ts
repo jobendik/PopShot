@@ -1,6 +1,6 @@
 import { BALL_BOUNCE, BALL_COLORS, BALL_HSPEED, BALL_RADIUS, CEILING_Y, GROUND_Y, GRAVITY, HEX_BOUNCE_MULT, HEX_HSPEED_MULT, WALL_L, WALL_R, type BallType, type PickupType } from '../constants';
 import { AudioSys } from '../systems/audio';
-import { clamp, collideCircleRect, rand, randi } from '../utils';
+import { clamp, collideCircleRect, rand, randi, sweepHitsRect } from '../utils';
 import { Hazard } from './hazard';
 import { Particle, Shockwave, SmokeCloud } from './particle';
 import { Pickup } from './pickup';
@@ -143,6 +143,7 @@ export class Ball {
     }
 
     // Physics
+    const prevY = this.y;
     this.vy += GRAVITY * dt;
     this.x += this.vx * dt;
     this.y += this.vy * dt;
@@ -197,8 +198,25 @@ export class Ball {
         } else {
           this.vx = c.nx * Math.abs(this.vx);
         }
+      } else if (this.x + this.r >= p.x && this.x - this.r <= p.x + p.w
+                 && sweepHitsRect(this.x, prevY, this.y, this.r, p.x, p.y, p.w, p.h)) {
+        // Swept fallback: a fast-moving (or lag-spiked) ball can clear a thin
+        // platform's whole vertical span within one physics step, so the
+        // end-of-frame circle check above never overlaps it. Resolve the
+        // crossing using the ball's direction of travel so it still bounces
+        // off the platform instead of tunnelling through.
+        if (prevY < p.y) {
+          // Was above, ended below/past — snap to the top surface.
+          this.y = p.y - this.r;
+          this.vy = -BALL_BOUNCE[this.size] * (this.type === 'hexagon' ? HEX_BOUNCE_MULT : 1);
+        } else {
+          // Was below, ended above/past — snap to the underside.
+          this.y = p.y + p.h + this.r;
+          this.vy = Math.abs(this.vy) * 0.7;
+        }
       }
     }
+
 
     // Destructibles (also bouncy)
     for (const d of game.destructibles) {

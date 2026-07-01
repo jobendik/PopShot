@@ -32,11 +32,19 @@ export function updatePlayerDead(game: Game, dt: number) {
       } else {
         // Respawn in place: balls keep their positions and velocities,
         // boss HP persists, score and timer carry over, combo was reset
-        // when the life was lost, weapon was reset to harpoon, and the
+        // when the life was lost, weapon was reset to harpoon, and each
         // player gets 2s of invuln to recover (all handled by
         // respawnPlayer). Works for tour, score_attack, daily, boss_rush,
         // and panic alike.
-        if (game.player) game.respawnPlayer(game.player);
+        //
+        // This state is only entered once EVERY player is down (see
+        // killPlayer in systems/combat.ts), so in co-op more than one of
+        // player/player2/player3/player4 can be dead here — respawn all of
+        // them, not just Player 1, or teammates would be stranded dead
+        // forever even though the shared life pool still has lives left.
+        for (const p of game.getAllPlayers()) {
+          if (p.dead) game.respawnPlayer(p);
+        }
         game.state = State.PLAYING;
       }
     } else {
@@ -80,7 +88,12 @@ export function startRewardedContinue(game: Game) {
     game.usedRewardedContinue = true;
     game.lives = 1;
     if (game.mode === 'panic') {
-      if (game.player) game.respawnPlayer(game.player);
+      // GAME_OVER means every player was down; revive all of them (not just
+      // Player 1) so a co-op teammate isn't left stranded dead after a
+      // rewarded continue.
+      for (const p of game.getAllPlayers()) {
+        if (p.dead) game.respawnPlayer(p);
+      }
       game.state = State.PLAYING;
     } else if (game.mode === 'score_attack' || game.mode === 'boss_rush') {
       // Reload the current level but keep score, queued bosses, and the

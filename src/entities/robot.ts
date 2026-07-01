@@ -71,6 +71,23 @@ export const ROBOT_P2_PALETTE: RobotPalette = {
   accent: '#9be7ff', core: '#9bffe9',
 };
 
+// P3 amber/orange skin — third local-co-op slot, kept visually distinct from
+// P1 (equipped palette), P2 (teal) and P4 (violet).
+export const ROBOT_P3_PALETTE: RobotPalette = {
+  body: '#d97a2c', bodyDark: '#8a4712', bodyHi: '#ffb066',
+  boot: '#5a2c0a', bootHi: '#8a5024',
+  hat: '#ffce4a', hatHi: '#ffe49b', hatDark: '#cf9a1e',
+  accent: '#ffd166', core: '#ffb347',
+};
+
+// P4 violet skin — fourth local-co-op slot.
+export const ROBOT_P4_PALETTE: RobotPalette = {
+  body: '#8a4fd6', bodyDark: '#4d2680', bodyHi: '#c79bff',
+  boot: '#2e1450', bootHi: '#5b3a8a',
+  hat: '#ffce4a', hatHi: '#ffe49b', hatDark: '#cf9a1e',
+  accent: '#e0b3ff', core: '#c084fc',
+};
+
 // Fill any fields the game's PlayerPalette doesn't carry (bootHi, core) so the
 // equipped P1 palette "just works" without changing the save format.
 function withDefaults(pal: RobotPalette): Required<RobotPalette> {

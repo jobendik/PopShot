@@ -134,6 +134,12 @@ export function buildControls(): HTMLElement {
       rich: true,
     },
     { label: 'PS5 P2 Join',   value: 'Connect 2nd controller' },
+    { label: 'P3 Move',       value: 'A / D',            kbd: true },
+    { label: 'P3 Fire',       value: 'W',                kbd: true },
+    { label: 'PS5 P3 Join',   value: 'Connect 3rd controller' },
+    { label: 'P4 Move',       value: 'J / L',            kbd: true },
+    { label: 'P4 Fire',       value: 'I',                kbd: true },
+    { label: 'PS5 P4 Join',   value: 'Connect 4th controller' },
   ];
   const rowsEl = root.querySelector<HTMLElement>('[data-role="rows"]')!;
   rowsEl.innerHTML = rowHtml(rows);

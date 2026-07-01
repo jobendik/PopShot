@@ -1,26 +1,35 @@
 import { CEILING_Y, WALL_L, WALL_R } from '../constants';
-import { clamp, collideCircleRect, rand } from '../utils';
+import { clamp, collideCircleRect, rand, sweepHitsRect } from '../utils';
 import { roundRect } from '../rendering/canvas';
 import { INK, PAL } from '../rendering/theme';
 import type { Ball } from './ball';
 import type { Player } from './player';
 import type { Game } from '../game';
 
-/** True if a point-ish rect (x±w/2, y..y+h) overlaps any solid platform. */
-function hitsPlatformRect(game: Game, x: number, y: number, w: number, h: number) {
+/** True if a point-ish rect (x±w/2, y..y+h), swept from its previous y
+ *  (prevY) to its current y, overlaps any solid platform. The sweep check
+ *  keeps fast bullets/pellets from tunnelling through a thin platform when a
+ *  single physics step covers more distance than the platform is thick. */
+function hitsPlatformRect(game: Game, x: number, prevY: number, y: number, w: number, h: number) {
   for (const p of game.platforms) {
     if (!p.blocksShots) continue;
     const overlapsX = x + w / 2 >= p.x && x - w / 2 <= p.x + p.w;
-    const overlapsY = y + h >= p.y && y <= p.y + p.h;
-    if (overlapsX && overlapsY) return true;
+    if (!overlapsX) continue;
+    if (sweepHitsRect(x, prevY, y + h, w / 2, p.x, p.y, p.w, p.h)) return true;
   }
   return false;
 }
 
-/** True if a circular projectile overlaps any solid platform. */
-function hitsPlatformCircle(game: Game, x: number, y: number, r: number) {
+/** True if a circular projectile, swept from its previous position
+ *  (prevX, prevY) to its current one, overlaps any solid platform. */
+function hitsPlatformCircle(game: Game, prevX: number, prevY: number, x: number, y: number, r: number) {
   for (const p of game.platforms) {
-    if (p.blocksShots && collideCircleRect(x, y, r, p.x, p.y, p.w, p.h)) return true;
+    if (!p.blocksShots) continue;
+    if (collideCircleRect(x, y, r, p.x, p.y, p.w, p.h)) return true;
+    // Swept fallback for the dominant vertical motion — catches the case
+    // where the circle's end-of-frame position already cleared the platform
+    // entirely (moved further than its own diameter in one step).
+    if (x + r >= p.x && x - r <= p.x + p.w && sweepHitsRect(x, prevY, y, r, p.x, p.y, p.w, p.h)) return true;
   }
   return false;
 }
@@ -163,32 +172,39 @@ export class Projectile {
 
   update(dt, game) {
     if (this.type === 'harpoon') {
+      const prevTipY = this.tipY;
       this.tipY -= this.speed * dt;
       if (this.tipY <= CEILING_Y) this.dead = true;
-      // Hits platforms? Treat solid platforms as walls.
+      // Hits platforms? Treat solid platforms as walls. Swept against the
+      // tip's previous position so a fast harpoon can't skip clean through a
+      // thin platform within a single physics step.
       for (const p of game.platforms) {
-        if (p.blocksShots && this.x >= p.x && this.x <= p.x + p.w && this.tipY <= p.y + p.h && this.tipY >= p.y) {
+        if (p.blocksShots && this.x >= p.x && this.x <= p.x + p.w
+            && sweepHitsRect(this.x, prevTipY, this.tipY, 0, p.x, p.y, p.w, p.h)) {
           this.dead = true;
           break;
         }
       }
     } else if (this.type === 'bullet' || this.type === 'pellet') {
+      const prevY = this.y;
       this.x += (this.vx || 0) * dt;
       this.y += this.vy * dt;
       if (this.y < CEILING_Y || this.x < WALL_L || this.x > WALL_R) this.dead = true;
-      else if (hitsPlatformRect(game, this.x, this.y, this.w, this.h || 10)) this.dead = true;
+      else if (hitsPlatformRect(game, this.x, prevY, this.y, this.w, this.h || 10)) this.dead = true;
     } else if (this.type === 'laser') {
       this.life -= dt;
       if (this.life <= 0) this.dead = true;
     } else if (this.type === 'flame') {
+      const prevX = this.x, prevY = this.y;
       this.life -= dt;
       this.y += this.vy * dt;
       this.x += this.vx * dt;
       this.vy += 100 * dt; // deceleration
       this.r += 30 * dt;
       if (this.life <= 0 || this.y < CEILING_Y) this.dead = true;
-      else if (hitsPlatformCircle(game, this.x, this.y, this.r)) this.dead = true;
+      else if (hitsPlatformCircle(game, prevX, prevY, this.x, this.y, this.r)) this.dead = true;
     } else if (this.type === 'shuriken') {
+      const prevX = this.x, prevY = this.y;
       this.life -= dt;
       this.x += this.vx * dt;
       this.y += this.vy * dt;
@@ -204,7 +220,7 @@ export class Projectile {
         this.bounces--;
       }
       if (this.life <= 0 || this.y > game.canvas.height || this.y < CEILING_Y - 30 || this.x < WALL_L - 30 || this.x > WALL_R + 30) this.dead = true;
-      else if (hitsPlatformCircle(game, this.x, this.y, this.r)) {
+      else if (hitsPlatformCircle(game, prevX, prevY, this.x, this.y, this.r)) {
         // Shurikens bounce off walls/ceiling — bounce off solid platforms too
         // (from below) instead of passing straight through them.
         if (this.bounces > 0) {
@@ -215,15 +231,17 @@ export class Projectile {
         }
       }
     } else if (this.type === 'bomb') {
+      const prevX = this.x, prevY = this.y;
       this.life -= dt;
       this.x += this.vx * dt;
       this.y += this.vy * dt;
       this.vy += 520 * dt;
-      if (this.y <= CEILING_Y || this.life <= 0 || hitsPlatformCircle(game, this.x, this.y, this.r)) {
+      if (this.y <= CEILING_Y || this.life <= 0 || hitsPlatformCircle(game, prevX, prevY, this.x, this.y, this.r)) {
         game.explodeProjectile(this, this.x, this.y);
       } else if (this.y > game.canvas.height) this.dead = true;
     } else if (this.type === 'grapple') {
       if (!this.anchored) {
+        const prevTipY = this.tipY;
         this.tipY -= this.speed * dt;
         if (this.tipY <= CEILING_Y) {
           this.tipY = CEILING_Y;
@@ -231,7 +249,7 @@ export class Projectile {
         }
         for (const p of game.platforms) {
           if (p.blocksShots && this.x >= p.x && this.x <= p.x + p.w
-              && this.tipY <= p.y + p.h && this.tipY >= p.y) {
+              && sweepHitsRect(this.x, prevTipY, this.tipY, 0, p.x, p.y, p.w, p.h)) {
             this.tipY = p.y + p.h;
             this.anchored = true;
             break;
@@ -243,13 +261,14 @@ export class Projectile {
         if (this.anchorLife <= 0) this.dead = true;
       }
     } else if (this.type === 'diagonal') {
+      const prevX = this.x, prevY = this.y;
       this.x += this.vx * dt;
       this.y += this.vy * dt;
       // Light gravity so the bolt arcs slightly — sells the "thrown" feel.
       this.vy += 220 * dt;
       if (this.y < CEILING_Y || this.x < WALL_L || this.x > WALL_R || this.y > game.canvas.height) {
         this.dead = true;
-      } else if (hitsPlatformCircle(game, this.x, this.y, 8)) {
+      } else if (hitsPlatformCircle(game, prevX, prevY, this.x, this.y, 8)) {
         this.dead = true;
       }
     }
