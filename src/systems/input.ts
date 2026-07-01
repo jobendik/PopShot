@@ -369,7 +369,9 @@ export function tickGamepadInputs(state: GameState) {
     const axisX = pad2.axes[0] ?? 0;
     const horizontalLeft = axisX <= -GAMEPAD_AXIS_DEADZONE || !!pad2.buttons[14]?.pressed;
     const horizontalRight = axisX >= GAMEPAD_AXIS_DEADZONE || !!pad2.buttons[15]?.pressed;
-    // Cross/Circle/Square all fire for P2, mirroring the I/U/K keyboard trio.
+    // Cross/Circle/Square (buttons 0/1/2) all fire for P2 — entities/player.ts
+    // treats KeyI, KeyU and KeyK as equivalent P2 fire keys, so any one of
+    // these buttons setting KeyI is enough to trigger (and join) P2.
     const shoot = !!pad2.buttons[0]?.pressed || !!pad2.buttons[1]?.pressed || !!pad2.buttons[2]?.pressed;
 
     applySyntheticKey('KeyJ', horizontalLeft && !horizontalRight, gamepad2KeyState);

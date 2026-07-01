@@ -133,7 +133,7 @@ export function buildControls(): HTMLElement {
       ),
       rich: true,
     },
-    { label: '2nd controller', value: 'Joins Player 2 automatically' },
+    { label: 'PS5 P2 Join',   value: 'Connect 2nd controller' },
   ];
   const rowsEl = root.querySelector<HTMLElement>('[data-role="rows"]')!;
   rowsEl.innerHTML = rowHtml(rows);
