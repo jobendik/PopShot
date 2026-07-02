@@ -36,19 +36,22 @@ const buttons: Record<BtnId, HTMLElement | null> = { left: null, right: null };
 const activePointer = new Map<number, BtnId | null>();
 const held: Record<BtnId, boolean> = { left: false, right: false };
 
-/** Return the x-coordinate that splits left from right zones (= stage centre).
- *  Derived from the right zone element so it tracks CSS layout exactly. */
-function zoneSplitX(): number {
-  if (buttons.right) return buttons.right.getBoundingClientRect().left;
-  // Should never reach here after buildTouchControls() has run. Fallback to
-  // viewport centre so hits are still processed correctly if it somehow does.
-  if (import.meta.env.DEV) console.warn('[touchControls] zoneSplitX: buttons.right is null');
-  return window.innerWidth / 2;
+/** Point-in-rect test against a zone element's actual on-screen box. Using
+ *  each zone's own `getBoundingClientRect()` (rather than a single client-X
+ *  split point) keeps this correct when the stage is auto-rotated 90° for
+ *  portrait viewports (see `.is-rotated` in base.css): the "left"/"right"
+ *  zones then occupy the top/bottom halves of the screen rather than a
+ *  left/right split, and the browser-computed rects already reflect that. */
+function inZone(el: HTMLElement | null, clientX: number, clientY: number): boolean {
+  if (!el) return false;
+  const r = el.getBoundingClientRect();
+  return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
 }
 
-function hitTest(clientX: number, _clientY: number): BtnId | null {
-  // Zone split: left half vs right half of the stage.
-  return clientX < zoneSplitX() ? 'left' : 'right';
+function hitTest(clientX: number, clientY: number): BtnId | null {
+  if (inZone(buttons.left, clientX, clientY)) return 'left';
+  if (inZone(buttons.right, clientX, clientY)) return 'right';
+  return null;
 }
 
 function applyHeld(next: Record<BtnId, boolean>) {

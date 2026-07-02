@@ -31,6 +31,15 @@ export function installViewportSizing() {
     const { width, height } = readViewport();
     root.style.setProperty('--app-vw', `${width}px`);
     root.style.setProperty('--app-vh', `${height}px`);
+    // The game world is a fixed 16:9 landscape stage. Rather than squeezing
+    // it into a thin horizontal strip (or forcing the player to physically
+    // rotate their phone) whenever the viewport is taller than it is wide —
+    // portrait phones/tablets, or just a narrow desktop window — rotate the
+    // stage 90° via CSS (`.is-rotated #stage` in base.css) so it fills the
+    // available space instead. `input.ts`'s toCanvasCoords() mirrors this
+    // exact transform to map pointer/touch coordinates back into world
+    // space, so the two must be kept in sync.
+    root.classList.toggle('is-rotated', height > width);
   };
 
   const schedule = () => {
@@ -55,6 +64,7 @@ export function installViewportSizing() {
     window.removeEventListener('pageshow', schedule);
     visualViewport?.removeEventListener('resize', schedule);
     visualViewport?.removeEventListener('scroll', schedule);
+    root.classList.remove('is-rotated');
     uninstallViewportSizing = null;
   };
 

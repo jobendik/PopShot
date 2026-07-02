@@ -118,6 +118,29 @@ function getConnectedGamepads(): Gamepad[] {
 function toCanvasCoords(clientX: number, clientY: number) {
   if (!canvasEl) return { x: 0, y: 0 };
   const rect = canvasEl.getBoundingClientRect();
+
+  // Portrait auto-rotate (see `.is-rotated #stage` in base.css /
+  // installViewportSizing() in viewport.ts): the stage is spun 90° in place
+  // via `transform: rotate(90deg)` so the fixed 16:9 world fills a portrait
+  // viewport. getBoundingClientRect() reports the rotated (visual) box, so
+  // its width/height come back swapped relative to the canvas's own
+  // pre-rotation layout box. Undo the rotation around the box's center to
+  // recover the pre-rotation local point before scaling into world units.
+  if (document.documentElement.classList.contains('is-rotated')) {
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = clientX - cx;
+    const dy = clientY - cy;
+    const localW = rect.height; // canvas's own (pre-rotation) CSS width
+    const localH = rect.width;  // canvas's own (pre-rotation) CSS height
+    const localX = localW / 2 + dy;
+    const localY = localH / 2 - dx;
+    return {
+      x: localX * (W / localW),
+      y: localY * (H / localH),
+    };
+  }
+
   const scaleX = W / rect.width;
   const scaleY = H / rect.height;
   return {
