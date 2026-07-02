@@ -64,17 +64,26 @@ html, body {
   box-sizing: border-box;
   /* Outer page ambience — tinted to the active biome's sky so the letterbox
      edges read as part of the scene (a cohesive full-screen look) instead of
-     hard black bars on phones whose aspect ratio is wider than the 16:9 stage. */
+     hard black bars whenever the viewport's aspect ratio doesn't exactly
+     match the 16:9 stage (portrait auto-rotate above covers most phones, so
+     this mainly softens desktop windows / unusual embed sizes). Reaches a
+     lighter, more saturated tint before fading to the edges so it never
+     reads as "broken" flat black. */
   background:
     radial-gradient(ellipse at 50% 35%,
-      color-mix(in srgb, var(--sky-1, #0d1a2e) 55%, #04060a) 0%,
-      #04060a 70%),
+      color-mix(in srgb, var(--sky-1, #0d1a2e) 70%, #04060a) 0%,
+      color-mix(in srgb, var(--sky-1, #0d1a2e) 20%, #04060a) 55%,
+      #04060a 100%),
     #000;
   transition: background 600ms ease;
 }
 
 #stage {
   position: relative;
+  /* #wrap is a flex container: without this, flexbox's default
+     flex-shrink: 1 would squash the rotated stage's (intentionally
+     axis-swapped, pre-rotation) box down to #wrap's un-rotated width. */
+  flex-shrink: 0;
   width: min(var(--app-usable-w), calc(var(--app-usable-h) * 16 / 9));
   height: min(var(--app-usable-h), calc(var(--app-usable-w) * 9 / 16));
   max-width: 100%;
@@ -412,31 +421,24 @@ body[data-state="daily_result"] .toasts-layer { display: none; }
   letter-spacing: 0.06em;
 }
 
-/* ---- Portrait orientation prompt ---- */
-#rotate-prompt {
-  position: fixed;
-  inset: 0;
-  background: #07101e;
-  display: none;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  z-index: var(--z-modal);
-  text-align: center;
-  padding: 24px;
-}
-#rotate-prompt .rotate-icon {
-  font-size: 96px;
-  color: var(--brand-yellow);
-  animation: rotate-hint 1.6s ease-in-out infinite;
-  margin-bottom: 24px;
-}
-#rotate-prompt .rotate-text { font-size: 20px; color: #fff; max-width: 320px; line-height: 1.4; }
-@keyframes rotate-hint {
-  0%, 100% { transform: rotate(0deg); }
-  50%      { transform: rotate(90deg); }
-}
-@media (hover: none) and (pointer: coarse) and (orientation: portrait) {
-  #rotate-prompt { display: flex; }
-  #wrap          { display: none; }
+/* ---- Portrait auto-rotate ----
+   The game world is a fixed 16:9 landscape stage. Instead of asking the
+   player to physically rotate their device (or squeezing the stage into a
+   thin horizontal strip), `installViewportSizing()` (src/systems/viewport.ts)
+   toggles `.is-rotated` on <html> whenever the viewport is taller than it
+   is wide — portrait phones/tablets, or a narrow desktop window — and this
+   rule rotates the stage 90° in place so it fills the available space.
+   `src/systems/input.ts`'s toCanvasCoords() mirrors this exact transform to
+   map pointer/touch coordinates back into world space; keep both in sync. */
+html.is-rotated #stage {
+  width: min(var(--app-usable-h), calc(var(--app-usable-w) * 16 / 9));
+  height: min(var(--app-usable-w), calc(var(--app-usable-h) * 9 / 16));
+  /* The base rule's `max-width/max-height: 100%` are relative to #wrap's
+     width/height and would wrongly clamp the (intentionally axis-swapped)
+     rotated box back down to the container's un-rotated width. Override
+     with the swapped axis so the box can use the full available space
+     before rotation puts it back within bounds. */
+  max-width: var(--app-usable-h);
+  max-height: var(--app-usable-w);
+  transform: rotate(90deg);
 }
