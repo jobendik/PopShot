@@ -351,7 +351,7 @@ export function explodeProjectile(game: Game, projectile: Projectile, x: number,
   game.hitPause = 0.06;
 }
 
-export function killPlayer(game: Game, player: Player, reason: DeathReason = 'unknown') {
+export function killPlayer(game: Game, player: Player, reason: DeathReason = 'unknown', chargeLife = true) {
   if (player.invuln > 0 || player.dead) return;
   if (player.shield) {
     player.shield = false;
@@ -382,11 +382,17 @@ export function killPlayer(game: Game, player: Player, reason: DeathReason = 'un
   // already does a white tint; this adds a radial red vignette pulse on top.
   FX.damageFlash();
   game.combo = 0;
-  game.lives--;
+  // In co-op, a single shared event (e.g. the level timer hitting 0) can
+  // kill every player in the same frame. That should still only cost the
+  // team ONE life, not one per player caught in the blast — otherwise a
+  // single timeout in 4P co-op could drain the whole life pool at once.
+  // Callers that kill a group of players for one shared reason pass
+  // chargeLife=false for all but the first victim.
+  if (chargeLife) game.lives--;
   // Life-lost toast — informs the player how many lives remain. Suppressed
   // on the final death since the GAME OVER screen takes over immediately
   // and the toast would race with it.
-  if (game.lives > 0) {
+  if (chargeLife && game.lives > 0) {
     FX.toast('danger', 'LIFE LOST', game.lives + ' remaining');
   }
   // In co-op, lives are a shared pool, but the run must not end just

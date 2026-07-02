@@ -649,7 +649,7 @@ export class Game {
   // keep the same `game.method(...)` surface.
   _popBall(ball: Ball, source: any) { popBall(this, ball, source); }
   explodeProjectile(projectile: Projectile, x: number, y: number) { explodeProjectile(this, projectile, x, y); }
-  killPlayer(player: Player, reason: DeathReason = 'unknown') { killPlayer(this, player, reason); }
+  killPlayer(player: Player, reason: DeathReason = 'unknown', chargeLife = true) { killPlayer(this, player, reason, chargeLife); }
   levelClear() { clearLevel(this); }
 
   // ============================ MAIN LOOP ============================

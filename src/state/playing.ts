@@ -25,17 +25,22 @@ export function updatePlaying(game: Game, dt: number) {
     game.state = State.PAUSED; AudioSys.menu(); return;
   }
   // Local co-op is a desktop-only feature (touch UI is single-player).
-  // Each player joins on their own fire-key press: P2 = I/U/K, P3 = W (or its
-  // dedicated 3rd-controller button), P4 = I (or its dedicated 4th-controller
-  // button). Note P3/P4's keyboard letters are literally shared with P1/P2's
-  // (ASDW / LKJI as requested) — on a single physical keyboard those pairs
-  // move together, but a 3rd/4th gamepad gives P3/P4 fully independent input.
+  // Each player joins on their own fire-key press: P2 = I/U/K (or its
+  // dedicated 2nd-controller button), P3 = W (or its dedicated 3rd-controller
+  // button), P4 = I (or its dedicated 4th-controller button). Note P3/P4's
+  // keyboard letters are literally shared with P1/P2's (ASDW / LKJI as
+  // requested) — on a single physical keyboard those pairs move together,
+  // but a 2nd/3rd/4th gamepad gives P2/P3/P4 fully independent input (see
+  // systems/input.ts's dedicated Gamepad2*/Gamepad3*/Gamepad4* synthetic
+  // keys — a 2nd controller must NOT drive the raw KeyJ/KeyL/KeyI codes, or
+  // it would also satisfy P4's keyboard-fallback checks below and puppet
+  // both P2 and P4 at once).
   // Because KeyI is P2's join key too, pressing I before P2 has joined always
   // joins P2 first (the P2 check runs first and consumes the press) — P4
   // only joins via keyboard once P2 already exists, or at any time via its
   // own (4th) gamepad. This is an unavoidable consequence of reusing P2's
   // letters for P4 as requested, not an ordering bug.
-  if (!isTouchDevice && !game.player2 && (consumePressed('KeyI') || consumePressed('KeyK') || consumePressed('KeyU'))) {
+  if (!isTouchDevice && !game.player2 && (consumePressed('KeyI') || consumePressed('KeyK') || consumePressed('KeyU') || consumePressed('Gamepad2Shoot'))) {
     game.joinPlayer2();
   }
   if (!isTouchDevice && !game.player3 && (consumePressed('KeyW') || consumePressed('Gamepad3Shoot'))) {
@@ -79,7 +84,11 @@ export function updatePlaying(game: Game, dt: number) {
       // Player 1 was killed here, so in co-op any other still-living player
       // just kept playing on a frozen zero timer instead of the round
       // actually ending (or properly resetting once lives ran out).
-      for (const p of game.getLivingPlayers()) game.killPlayer(p, 'timeout');
+      // Only the first kill charges the shared life pool — a timeout is one
+      // shared event, so it should cost exactly one life, not one per
+      // player who happened to still be standing (that previously drained
+      // up to 4 lives at once in 4P co-op).
+      game.getLivingPlayers().forEach((p, i) => game.killPlayer(p, 'timeout', i === 0));
       return;
     }
   }
@@ -154,9 +163,10 @@ export function updatePlaying(game: Game, dt: number) {
     game.introTimer -= dt;
     const moved = keysPressed['ArrowLeft'] || keysPressed['ArrowRight']
                || keysPressed['KeyA'] || keysPressed['KeyD']
-               || keysPressed['KeyJ'] || keysPressed['KeyL'];
+               || keysPressed['KeyJ'] || keysPressed['KeyL']
+               || keysPressed['Gamepad2Left'] || keysPressed['Gamepad2Right'];
     const shot  = keysPressed['Space'] || keysPressed['ArrowUp'] || keysPressed['KeyW']
-               || keysPressed['KeyI'];
+               || keysPressed['KeyI'] || keysPressed['Gamepad2Shoot'];
     if (moved || shot || pointer.pressed) game.introTimer = 0;
     // Edge: intro just ended (either by timeout or early-dismiss). Fire a
     // brief "GO!" beat so the player knows their input matters NOW. Panic

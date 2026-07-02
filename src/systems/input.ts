@@ -47,15 +47,16 @@ let _autoFireActive = false;
 
 const GAMEPAD_AXIS_DEADZONE = 0.35;
 // Player 1's controller drives the same synthetic keys as the keyboard's
-// arrows/Space/etc. Player 2's controller drives the JKL(+I) keys that
-// entities/player.ts already reads for local co-op. Players 3 and 4 don't
-// have dedicated physical keyboard keys of their own (their keyboard
-// fallback — A/S/D/W and L/K/J/I — literally reuses P1's/P2's keys), so
-// their gamepads instead drive dedicated synthetic codes (Gamepad3*/
-// Gamepad4*) that entities/player.ts reads in addition to the keyboard
-// letters. Keeping one state map per pad means a controller unplugging (or
-// simply not being present) only releases the keys IT was holding, never
-// another player's.
+// arrows/Space/etc. Players 2, 3 and 4 don't have dedicated physical
+// keyboard keys of their own (their keyboard fallback — J/L/I, A/S/D/W and
+// L/K/J/I — literally reuses P1's/P2's keys), so their gamepads instead
+// drive dedicated synthetic codes (Gamepad2*/Gamepad3*/Gamepad4*) that
+// entities/player.ts reads in addition to the keyboard letters. This is
+// required, not cosmetic: if P2's controller drove the raw KeyJ/KeyL/KeyI
+// codes, it would also satisfy P4's keyboard-fallback checks and silently
+// puppet Player 4 too. Keeping one state map per pad means a controller
+// unplugging (or simply not being present) only releases the keys IT was
+// holding, never another player's.
 const gamepadKeyState: Record<string, boolean> = {
   ArrowLeft: false,
   ArrowRight: false,
@@ -68,9 +69,9 @@ const gamepadKeyState: Record<string, boolean> = {
   KeyM: false,
 };
 const gamepad2KeyState: Record<string, boolean> = {
-  KeyJ: false,
-  KeyL: false,
-  KeyI: false,
+  Gamepad2Left: false,
+  Gamepad2Right: false,
+  Gamepad2Shoot: false,
 };
 const gamepad3KeyState: Record<string, boolean> = {
   Gamepad3Left: false,
@@ -409,14 +410,17 @@ export function tickGamepadInputs(state: GameState) {
     const axisX = pad2.axes[0] ?? 0;
     const horizontalLeft = axisX <= -GAMEPAD_AXIS_DEADZONE || !!pad2.buttons[14]?.pressed;
     const horizontalRight = axisX >= GAMEPAD_AXIS_DEADZONE || !!pad2.buttons[15]?.pressed;
-    // Cross/Circle/Square (buttons 0/1/2) all fire for P2 — entities/player.ts
-    // treats KeyI, KeyU and KeyK as equivalent P2 fire keys, so any one of
-    // these buttons setting KeyI is enough to trigger (and join) P2.
+    // Cross/Circle/Square (buttons 0/1/2) all fire for P2. Note: this used to
+    // drive the raw KeyJ/KeyL/KeyI codes, which entities/player.ts's P4
+    // branch ALSO reads as its keyboard fallback — so plugging in a second
+    // controller silently drove Player 4 too (one person "playing two
+    // players"). Using dedicated Gamepad2* synthetic codes (mirroring how
+    // pads 3/4 already work) keeps P2's controller from leaking into P4.
     const shoot = !!pad2.buttons[0]?.pressed || !!pad2.buttons[1]?.pressed || !!pad2.buttons[2]?.pressed;
 
-    applySyntheticKey('KeyJ', horizontalLeft && !horizontalRight, gamepad2KeyState);
-    applySyntheticKey('KeyL', horizontalRight && !horizontalLeft, gamepad2KeyState);
-    applySyntheticKey('KeyI', shoot, gamepad2KeyState);
+    applySyntheticKey('Gamepad2Left', horizontalLeft && !horizontalRight, gamepad2KeyState);
+    applySyntheticKey('Gamepad2Right', horizontalRight && !horizontalLeft, gamepad2KeyState);
+    applySyntheticKey('Gamepad2Shoot', shoot, gamepad2KeyState);
 
     if (horizontalLeft || horizontalRight || shoot) anyActivity = true;
   }
