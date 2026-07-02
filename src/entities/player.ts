@@ -126,9 +126,9 @@ export class Player {
     // gives four fully independent players.
     let left: boolean, right: boolean, shoot: boolean;
     if (this.playerNum === 2) {
-      left = keys.KeyJ;
-      right = keys.KeyL;
-      shoot = keys.KeyI || keys.KeyU || keys.KeyK;
+      left = keys.KeyJ || keys.Gamepad2Left;
+      right = keys.KeyL || keys.Gamepad2Right;
+      shoot = keys.KeyI || keys.KeyU || keys.KeyK || keys.Gamepad2Shoot;
     } else if (this.playerNum === 3) {
       left = keys.KeyA || keys.Gamepad3Left;
       right = keys.KeyD || keys.Gamepad3Right;
