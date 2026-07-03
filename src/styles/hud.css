@@ -95,6 +95,11 @@
   text-transform: uppercase;
   box-shadow: 0 0 12px rgba(58, 134, 255, 0.45);
 }
+/* `display: inline-flex` above defeats the UA `[hidden] { display: none }`,
+   so we restate it locally (same fix as `.pause__mobile-settings[hidden]`).
+   Without this the SHIELD chip shows on every level from frame one, even
+   though the player starts without a shield. */
+.hud__shield-chip[hidden] { display: none; }
 
 /* ---- Center cluster: timer / wave + combo ---- */
 .hud__center { display: flex; flex-direction: column; align-items: center; gap: 4px; }

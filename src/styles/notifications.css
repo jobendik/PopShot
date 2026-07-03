@@ -683,6 +683,10 @@
   font-size: var(--fs-micro);
 }
 .menu__profile-title::before { content: "★"; }
+/* `display: inline-flex` above defeats the UA `[hidden] { display: none }`,
+   so we restate it locally (same fix as `.pause__mobile-settings[hidden]`).
+   Without this the title chip shows even for players with no earned title. */
+.menu__profile-title[hidden] { display: none; }
 
 .menu__profile-rank-wrap {
   display: flex;
