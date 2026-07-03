@@ -116,27 +116,30 @@ export class Player {
     // Input mapping:
     //   P1 = WASD/Arrows + Space (+ its own gamepad)
     //   P2 = J/L + I/U/K          (+ its own gamepad)
-    //   P3 = A/S/D/W ("ASDW")     (+ its own gamepad)
-    //   P4 = L/K/J/I ("LKJI")     (+ its own gamepad)
-    // P3/P4's keyboard letters are literally the same physical keys P1/P2
-    // already use (A/D/W and J/L/I respectively) — on a single keyboard
-    // those pairs will always move together. Each of P3/P4's OWN gamepad
-    // (3rd/4th controller) drives dedicated synthetic keys (Gamepad3*/
-    // Gamepad4* in systems/input.ts) so plugging in more controllers still
-    // gives four fully independent players.
+    //   P3 = its own (3rd) gamepad ONLY
+    //   P4 = its own (4th) gamepad ONLY
+    // P3/P4 deliberately have NO keyboard fallback: P3's natural keyboard
+    // letters (A/D/W) are the exact same physical keys P1 already uses, and
+    // P4's (J/L/I) are the same keys P2 uses. On a single physical keyboard
+    // those pairs are indistinguishable, so reading them here would make
+    // P1's/P2's own keypresses also drive P3/P4 — i.e. one person's input
+    // silently puppets a second on-screen player. Gating P3/P4 on their
+    // dedicated Gamepad3*/Gamepad4* synthetic keys only (see
+    // systems/input.ts) guarantees each requires its own physical
+    // controller and can never be driven by another player's input.
     let left: boolean, right: boolean, shoot: boolean;
     if (this.playerNum === 2) {
       left = keys.KeyJ || keys.Gamepad2Left;
       right = keys.KeyL || keys.Gamepad2Right;
       shoot = keys.KeyI || keys.KeyU || keys.KeyK || keys.Gamepad2Shoot;
     } else if (this.playerNum === 3) {
-      left = keys.KeyA || keys.Gamepad3Left;
-      right = keys.KeyD || keys.Gamepad3Right;
-      shoot = keys.KeyW || keys.Gamepad3Shoot;
+      left = keys.Gamepad3Left;
+      right = keys.Gamepad3Right;
+      shoot = keys.Gamepad3Shoot;
     } else if (this.playerNum === 4) {
-      left = keys.KeyJ || keys.Gamepad4Left;
-      right = keys.KeyL || keys.Gamepad4Right;
-      shoot = keys.KeyI || keys.Gamepad4Shoot;
+      left = keys.Gamepad4Left;
+      right = keys.Gamepad4Right;
+      shoot = keys.Gamepad4Shoot;
     } else {
       left = keys.KeyA || keys.ArrowLeft;
       right = keys.KeyD || keys.ArrowRight;

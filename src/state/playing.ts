@@ -25,28 +25,23 @@ export function updatePlaying(game: Game, dt: number) {
     game.state = State.PAUSED; AudioSys.menu(); return;
   }
   // Local co-op is a desktop-only feature (touch UI is single-player).
-  // Each player joins on their own fire-key press: P2 = I/U/K (or its
-  // dedicated 2nd-controller button), P3 = W (or its dedicated 3rd-controller
-  // button), P4 = I (or its dedicated 4th-controller button). Note P3/P4's
-  // keyboard letters are literally shared with P1/P2's (ASDW / LKJI as
-  // requested) — on a single physical keyboard those pairs move together,
-  // but a 2nd/3rd/4th gamepad gives P2/P3/P4 fully independent input (see
-  // systems/input.ts's dedicated Gamepad2*/Gamepad3*/Gamepad4* synthetic
-  // keys — a 2nd controller must NOT drive the raw KeyJ/KeyL/KeyI codes, or
-  // it would also satisfy P4's keyboard-fallback checks below and puppet
-  // both P2 and P4 at once).
-  // Because KeyI is P2's join key too, pressing I before P2 has joined always
-  // joins P2 first (the P2 check runs first and consumes the press) — P4
-  // only joins via keyboard once P2 already exists, or at any time via its
-  // own (4th) gamepad. This is an unavoidable consequence of reusing P2's
-  // letters for P4 as requested, not an ordering bug.
+  // P2 joins via its keyboard letters (I/U/K, none of which P1 uses) or its
+  // own 2nd-controller button. P3 and P4 have NO keyboard join at all: P3's
+  // natural letters (A/D/W) are the exact same physical keys P1 uses, and
+  // P4's (J/L/I) are the same keys P2 uses, so on a single keyboard a
+  // keyboard-join here would let P1's/P2's own keypresses join AND then
+  // drive a second on-screen player — precisely the "two players rendered,
+  // one controls both" bug this must never regress to. P3/P4 therefore only
+  // join via their own dedicated 3rd/4th gamepad (Gamepad3Shoot/
+  // Gamepad4Shoot in systems/input.ts), which guarantees each requires its
+  // own physical controller.
   if (!isTouchDevice && !game.player2 && (consumePressed('KeyI') || consumePressed('KeyK') || consumePressed('KeyU') || consumePressed('Gamepad2Shoot'))) {
     game.joinPlayer2();
   }
-  if (!isTouchDevice && !game.player3 && (consumePressed('KeyW') || consumePressed('Gamepad3Shoot'))) {
+  if (!isTouchDevice && !game.player3 && consumePressed('Gamepad3Shoot')) {
     game.joinPlayer3();
   }
-  if (!isTouchDevice && !game.player4 && (consumePressed('KeyI') || consumePressed('Gamepad4Shoot'))) {
+  if (!isTouchDevice && !game.player4 && consumePressed('Gamepad4Shoot')) {
     game.joinPlayer4();
   }
   // Restart
