@@ -122,7 +122,7 @@ export function renderPause(game: Game) {
   if (!game.player2 && game.unlockedLevel >= 3 && !isTouchDevice) {
     ctx.fillStyle = '#9be7ff';
     ctx.font = '15px sans-serif';
-    ctx.fillText('More players? Press I/K/U (P2), W (P3), or plug in more controllers.', W/2, 286 + lines.length * 22 + 10);
+    ctx.fillText('More players? Press I/K/U (P2), or plug in more controllers.', W/2, 286 + lines.length * 22 + 10);
   }
 
   // Reduced-motion accessibility toggle.
