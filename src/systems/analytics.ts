@@ -56,11 +56,14 @@ export function emit(name: string, data?: Record<string, unknown>) {
   }
 }
 
-// Default sink: structured console.debug. Easy to filter in DevTools.
-addSink(evt => {
-  // eslint-disable-next-line no-console
-  console.debug('[evt]', evt.name, evt.tMs + 'ms', evt.data ?? '');
-});
+// Default sink: structured console.debug. Dev-only — a production build on
+// CrazyGames must keep the console clean (reviewers check for console noise).
+if ((import.meta as any).env?.DEV) {
+  addSink(evt => {
+    // eslint-disable-next-line no-console
+    console.debug('[evt]', evt.name, evt.tMs + 'ms', evt.data ?? '');
+  });
+}
 
 /** Install global error + unhandled-rejection handlers. Call once at startup. */
 export function installErrorHandlers() {

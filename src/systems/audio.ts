@@ -43,6 +43,10 @@ const TIER_S_PRELOAD: string[] = [
   'pop/flourish_electric', 'pop/flourish_armored_shatter',
   'pop/flourish_lava', 'pop/flourish_sludge', 'pop/flourish_starbubble_clock',
   'weapon/harpoon_fire_01', 'weapon/harpoon_fire_02', 'weapon/harpoon_fire_03',
+  // Floor bounces — the rhythmic "tok" between pops is a signature Pang beat,
+  // so all five sizes ride in the first preload wave.
+  'bounce/floor_size0', 'bounce/floor_size1', 'bounce/floor_size2',
+  'bounce/floor_size3', 'bounce/floor_size4',
   'ui/nav_move', 'ui/nav_confirm', 'ui/button_hover',
   'stinger/player_dead', 'stinger/level_clear', 'stinger/timer_warning_10s',
   'combo/first_pop_celebration', 'combo/go_beat',
@@ -248,7 +252,7 @@ export const AudioSys = {
   // ---------- Procedural primitives (kept as fallback) ----------
   /** Generic envelope tone */
   beep(freq, dur, type = 'square', vol = 0.4, slide = 0) {
-    if (this.muted || this.cgMuted || !this.ctx) return;
+    if (this.muted || this.cgMuted || !this.ctx || !this.master) return;
     const t = this.ctx.currentTime;
     const osc = this.ctx.createOscillator();
     const gain = this.ctx.createGain();
@@ -263,7 +267,7 @@ export const AudioSys = {
   },
   /** Noise burst for explosions, etc. */
   noise(dur, freq, vol = 0.3) {
-    if (this.muted || this.cgMuted || !this.ctx) return;
+    if (this.muted || this.cgMuted || !this.ctx || !this.master) return;
     const t = this.ctx.currentTime;
     const bufSize = Math.floor(this.ctx.sampleRate * dur);
     const buf = this.ctx.createBuffer(1, bufSize, this.ctx.sampleRate);
@@ -343,6 +347,20 @@ export const AudioSys = {
     if (this._playVariant('pop/split', 0.7)) return;
     this.beep(380, 0.1, 'sawtooth', 0.2, 120);
   },
+  /** Timestamp of the last floor-bounce sound — global rate limit so a screen
+   *  full of balls reads as a rhythm, not a drum roll. */
+  _lastBounceMs: 0,
+  /** Ball floor bounce — the metronome of the whole game. Quiet, size-pitched,
+   *  rate-limited to one per ~90ms across all balls. */
+  bounce(size: number = 2) {
+    if (this.muted || this.cgMuted || !this.ctx) return;
+    const now = performance.now();
+    if (now - this._lastBounceMs < 90) return;
+    this._lastBounceMs = now;
+    const s = Math.max(0, Math.min(4, size));
+    if (this._playId(`bounce/floor_size${s}`, 0.28 + s * 0.04)) return;
+    this.beep(300 - s * 35, 0.05, 'sine', 0.1, -60);
+  },
   /** Soft descending blip when a shot dies without hitting anything and the
    *  combo breaks — makes the streak loss audible without being punishing. */
   miss() {
@@ -359,6 +377,13 @@ export const AudioSys = {
     const offset = (level - 1) * 80;
     const notes = [392 + offset, 523 + offset, 659 + offset, 784 + offset];
     notes.forEach((f, i) => setTimeout(() => this.beep(f, 0.1, 'triangle', 0.32), i * 55));
+  },
+  /** Early-chain rising tick for combos 2–4 — fills the celebration dead zone
+   *  between the first pop and the combo-5 NICE! fanfare. Pitch climbs with
+   *  the chain so the player *hears* the streak building. */
+  comboTick(combo: number) {
+    const f = 540 + Math.min(combo, 8) * 110;
+    setTimeout(() => this.beep(f, 0.07, 'triangle', 0.2, 60), 40);
   },
   pickup() {
     if (this._playId('pickup/generic_collect', 0.85)) return;
@@ -394,6 +419,13 @@ export const AudioSys = {
   menu() {
     if (this._playId('ui/nav_move', 0.7)) return;
     this.beep(660, 0.06, 'square', 0.2);
+  },
+  /** Primary-CTA click (PLAY, Daily, Retry) — a firmer confirm than the
+   *  nav-move tick, so committing to an action feels different from browsing. */
+  confirm() {
+    if (this._playId('ui/nav_confirm', 0.85)) return;
+    this.beep(520, 0.07, 'triangle', 0.3);
+    setTimeout(() => this.beep(780, 0.09, 'triangle', 0.3), 55);
   },
   /** Pointer entered a button — Tier-B subtle tick. Kept very quiet so a row
    *  of buttons swept by the cursor doesn't fatigue the ear. */

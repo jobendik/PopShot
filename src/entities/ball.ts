@@ -165,6 +165,7 @@ export class Ball {
       }
       this.squashTime = 0.18;
       this.floorBounces++;
+      AudioSys.bounce(this.size);
       // Lava ball drips on bounce
       if (this.type === 'lava' && Math.random() < 0.6) {
         game.hazards.push(new Hazard('lava', this.x - 18, GROUND_Y - 4, 36, 8, 3.5));

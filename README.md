@@ -1,6 +1,6 @@
 # PopShot
 
-A TypeScript + Vite + HTML5 Canvas arcade game in the Pang / Buster Bros tradition. Pop, split, dodge, survive. Procedural art, procedural audio, no runtime dependencies, CrazyGames-ready.
+A TypeScript + Vite + HTML5 Canvas arcade game in the Pang / Buster Bros tradition. Pop, split, dodge, survive. Procedural art, asset-based audio with a procedural WebAudio fallback, no runtime dependencies, CrazyGames-ready.
 
 ## Scripts
 
@@ -21,7 +21,7 @@ Reconsider later only if development moves toward asset-heavy worlds, reusable s
 - **Score Attack** — 3 lives, no continues, cycles Tour levels. Beat your best.
 - **Panic Mode** — endless waves with the **Rainbow Gauge** progress bar, periodic **Star Bubbles** (Clock-face freeze or Star-face screen-clear), and flashing time-stop micro-balls.
 - **Boss Rush** — every boss in sequence; no retries between fights. Best run + best score persisted.
-- **Daily Challenge** — one shared seeded level per UTC day with a rolled modifier (`double_score`, `no_pickups`, `tiny_hurtbox`, `big_bubbles`, `sudden_death`). Streak counter, copy-to-clipboard result, and one-click X (Twitter) share intent.
+- **Daily Challenge** — one shared seeded level per UTC day with a rolled modifier (`double_score`, `no_pickups`, `tiny_hurtbox`, `big_bubbles`, `sudden_death`). Streak counter and copy-to-clipboard result share (no external share links — CrazyGames forbids them).
 
 ### Content
 - **10 ball types** — normal, electric, explosive, smoke, lava, sludge, armored, bonus, hexagon (Super Pang polygonal physics), star bubble (Panic-mode special).
@@ -47,11 +47,13 @@ Reconsider later only if development moves toward asset-heavy worlds, reusable s
 
 ### Platform integration
 - **CrazyGames SDK v3** wired through `src/systems/platform.ts`: `gameplayStart`/`Stop` on state transitions, `happytime` on personal-best, midgame ads only between Tour levels (skips first cleared level of session, 60s minimum spacing), rewarded "watch ad to continue" on Score Attack / Panic / Boss Rush game-over. Ad-lifecycle hook ducks audio + pauses gameplay while ads are on screen.
-- Touch UI: bottom-left ◀ ▶ buttons, bottom-right FIRE, top-right pause. Multi-touch (hold direction + fire simultaneously). Portrait orientation prompt via CSS media query.
+- Touch UI: invisible half-screen hold zones (left half = move left, right half = move right) with always-on auto-fire, top-right pause. Multi-touch with finger-slide between zones. Portrait viewports rotate the stage 90° in place with inverse-mapped touch input.
+- No custom fullscreen button and no outbound links — the CrazyGames player chrome owns fullscreen, and external links are a rejection cause.
 - Graceful degradation: every SDK call is a safe no-op when the script is absent (local dev, adblock, offline).
 
 ### Bundle
-- ~140 KB raw, ~39 KB gzipped. Loads near-instantly.
+- Code: ~255 KB raw / ~73 KB gzipped JS + ~17 KB gzipped CSS. Loads near-instantly; audio (SFX/music under `public/`) streams lazily with a Tier-S preload list and a procedural WebAudio fallback so nothing blocks first play.
+- Fonts (Bowlby One, Inter) are self-hosted woff2 under `public/fonts/` (OFL-licensed) — the game makes no external font/CDN requests.
 
 ## Architecture
 
@@ -97,4 +99,4 @@ The workflow in `.github/workflows/deploy-pages.yml` will build `dist/` and depl
 
 ## Status
 
-Genuinely launch-ready for the CrazyGames Basic Launch pipeline. Remaining work is operational rather than in-engine: thumbnail/capsule art, real-device QA at iframe sizes 907×510 → 1366×768, listing copy submission, and review-feedback iteration. See [LAUNCH.md](LAUNCH.md) for the full release-candidate checklist.
+Launch-ready for the CrazyGames Basic Launch pipeline. Remaining work is operational rather than in-engine: confirming the provenance/licensing of the audio assets under `public/`, thumbnail/capsule art, real-device QA at iframe sizes 907×510 → 1366×768, listing copy submission, and review-feedback iteration.

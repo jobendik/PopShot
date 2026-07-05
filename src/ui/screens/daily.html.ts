@@ -7,7 +7,7 @@ import { LEVELS } from '../../data/levels';
 import { AudioSys } from '../../systems/audio';
 import { hasPlayedToday, liveStreak, pickDailyChallenge, todayUTC } from '../../systems/daily';
 import { Storage } from '../../systems/storage';
-import { copyDailyShareText, openDailyShareTweet } from '../../state/daily';
+import { copyDailyShareText } from '../../state/daily';
 import {
   missionsBlock, weeklyBlock, xpBarBlock, syncXpBar,
   nextBestActionBlock, almostCallout,
@@ -95,7 +95,6 @@ export function buildDailyResult(game: Game): HTMLElement {
     <div data-role="nba"></div>
     <div class="daily__actions">
       <button type="button" class="ui-btn ui-btn--success" data-role="copy">Copy Result</button>
-      <button type="button" class="ui-btn ui-btn--share" data-role="tweet">Share on X</button>
       <button type="button" class="ui-btn ui-btn--cta" data-role="menu">Main Menu</button>
     </div>
   `;
@@ -106,10 +105,6 @@ export function buildDailyResult(game: Game): HTMLElement {
     const btn = card.querySelector<HTMLElement>('[data-role="copy"]')!;
     btn.textContent = 'Copied ✓';
     setTimeout(() => { btn.textContent = 'Copy Result'; }, 1800);
-  });
-  card.querySelector<HTMLElement>('[data-role="tweet"]')!.addEventListener('click', () => {
-    AudioSys.menu();
-    openDailyShareTweet(game);
   });
   card.querySelector<HTMLElement>('[data-role="menu"]')!.addEventListener('click', () => {
     AudioSys.menu();

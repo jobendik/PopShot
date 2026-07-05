@@ -4,7 +4,7 @@
  * Shown ONCE on the first PLAYING entry on a touch device. Translucent
  * dim with two zone-area markers (left half = move left, right half = move
  * right), plus a "Tap anywhere to start" footer. Dismisses on any tap, on
- * the player's first horizontal move, or after 7 seconds.
+ * the player's first horizontal move, or after MAX_SHOW_MS.
  *
  * On dismiss we set Storage.mobileOnboardingSeen and persist. That same
  * flag also gates auto-fire (input.ts) so the player isn't auto-firing
@@ -29,7 +29,10 @@ let dismissTimer: number | null = null;
  *  is what triggers the overlay. */
 let prevInPlay = false;
 
-const MAX_SHOW_MS = 3200;
+// Long enough for a first-timer to actually read both zone labels; any tap
+// or first move still dismisses it instantly, so there is no downside for
+// players who don't need it.
+const MAX_SHOW_MS = 5000;
 
 function clearDismissTimer() {
   if (dismissTimer !== null) {

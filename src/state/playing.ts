@@ -330,14 +330,13 @@ export function renderWorld(game: Game) {
     ctx.fillRect(0, 0, W, H);
   }
 
-  // First-ever-session control hint — a calm pill above the player showing
-  // the basic controls. Shown only until the player has popped their very
-  // first ball ever (firstPopCelebrated is a sticky one-way flag in Storage).
-  // Fades out smoothly after the first pop so it doesn't linger.
-  // Suppressed on touch: the DOM onboarding overlay
-  // (src/ui/overlay/onboarding.html.ts) takes over there and explains the
-  // touch buttons specifically.
-  if (!isTouchDevice && !Storage.data.firstPopCelebrated && game.state === State.PLAYING && game.mode === 'tour' && game.levelIndex === 0 && game.introTimer <= 0) {
+  // First-ever-session control hint. Desktop gets a calm keyboard pill above
+  // the play field; BOTH device classes get the aim line + pulsing "POP THIS"
+  // ring on the first ball — that visual goal marker is even more valuable on
+  // touch, where the DOM onboarding overlay only explains movement. Shown
+  // only until the player has popped their very first ball ever
+  // (firstPopCelebrated is a sticky one-way flag in Storage), then fades.
+  if (!Storage.data.firstPopCelebrated && game.state === State.PLAYING && game.mode === 'tour' && game.levelIndex === 0 && game.introTimer <= 0) {
     const fadeFrom = 1.0;   // full opacity for the first second
     const hangSecs = 6.0;   // fully visible for this long
     const fadeSecs = 1.5;   // then fade out over this
@@ -346,26 +345,28 @@ export function renderWorld(game: Game) {
     const tOut = Math.max(0, Math.min(1, (age - hangSecs) / fadeSecs));
     const alpha = fadeFrom * tIn * (1 - tOut);
     if (alpha > 0.01) {
-      const w = 360, h = 56;
-      const x = W/2 - w/2, y = 96;
       ctx.save();
       ctx.globalAlpha = alpha;
-      // Match the HTML overlay-card chrome: navy fill, inner top highlight,
-      // accent hairline border.
-      ctx.fillStyle = 'rgba(10,24,50,0.82)';
-      roundRect(ctx, x, y, w, h, 12, true, false);
-      ctx.fillStyle = 'rgba(255,255,255,0.10)';
-      roundRect(ctx, x + 2, y + 2, w - 4, 10, 8, true, false);
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = 'rgba(255,214,10,0.65)';
-      roundRect(ctx, x, y, w, h, 12, false, true);
-      ctx.font = uiFont(12, 800);
-      ctx.fillStyle = PAL.cyan;
-      ctx.textAlign = 'center';
-      ctx.fillText('HOW TO PLAY', W/2, y + 17);
-      ctx.font = uiFont(15, 800);
-      ctx.fillStyle = PAL.yellow;
-      ctx.fillText('A / D or ← →  MOVE   •   SPACE / ↑  FIRE', W/2, y + 40);
+      if (!isTouchDevice) {
+        const w = 360, h = 56;
+        const x = W/2 - w/2, y = 96;
+        // Match the HTML overlay-card chrome: navy fill, inner top highlight,
+        // accent hairline border.
+        ctx.fillStyle = 'rgba(10,24,50,0.82)';
+        roundRect(ctx, x, y, w, h, 12, true, false);
+        ctx.fillStyle = 'rgba(255,255,255,0.10)';
+        roundRect(ctx, x + 2, y + 2, w - 4, 10, 8, true, false);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(255,214,10,0.65)';
+        roundRect(ctx, x, y, w, h, 12, false, true);
+        ctx.font = uiFont(12, 800);
+        ctx.fillStyle = PAL.cyan;
+        ctx.textAlign = 'center';
+        ctx.fillText('HOW TO PLAY', W/2, y + 17);
+        ctx.font = uiFont(15, 800);
+        ctx.fillStyle = PAL.yellow;
+        ctx.fillText('A / D or ← →  MOVE   •   SPACE / ↑  FIRE', W/2, y + 40);
+      }
       const firstBall = game.balls.find(b => !b.dead);
       if (firstBall && game.player) {
         const pulse = 0.5 + Math.sin(age * 7) * 0.5;
