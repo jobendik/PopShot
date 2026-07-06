@@ -6,6 +6,10 @@ vite-dev.err
 .DS_Store
 .smoke/
 
+# Playwright smoke-test artifacts
+test-results/
+playwright-report/
+
 # WAV masters for the SFX. The shipped tree (public/sfx) carries only the
 # compressed .ogg/.mp3 produced by tools/compress-audio.mjs; the lossless WAV
 # sources live here locally and are NOT committed (~170 MB). If we want them

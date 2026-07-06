@@ -233,6 +233,12 @@ export function popBall(game: Game, ball: Ball, source: any) {
       // shake/flash. Restricted to GODLIKE only so it stays meaningful.
       if (milestone === 4) FX.chromAb();
       AudioSys.comboHit(milestone);
+    } else if (game.combo >= 2 && game.combo <= 4) {
+      // Early-chain rising tick — combos 2-4 previously had NO celebration at
+      // all (just the HUD chip), leaving a flat dead zone between "first pop"
+      // and the combo-5 fanfare. The climbing pitch makes the streak audible
+      // from the second pop onward.
+      AudioSys.comboTick(game.combo);
     }
   }
 
@@ -293,6 +299,20 @@ export function popBall(game: Game, ball: Ball, source: any) {
   // Range without boosts: 30ms (size 0) → 78ms (size 4).
   const lastBallBonus = isLastBall ? 0.04 : 0;
   game.hitPause = Math.max(game.hitPause, 0.03 + ball.size * 0.012 + lastBallBonus);
+
+  // "Last one!" bullet-time — when this pop leaves exactly one ball alive,
+  // give a brief slow-mo beat (once per level) so the closing moment of a
+  // stage reads as a cinematic finish line instead of blending into the
+  // mid-level chaos. Skipped in Panic (waves refill instantly) and on boss
+  // levels (the boss keeps spawning balls, so "last" is meaningless there).
+  if (!game.lastBallSlowmo && !game.bossLevel && game.mode !== 'panic') {
+    const remaining = game.balls.filter(b => !b.dead).length;
+    if (remaining === 1) {
+      game.lastBallSlowmo = true;
+      game.slowTime = Math.max(game.slowTime, 0.65);
+      game.floatingTexts.push(new FloatingText(W / 2, 150, 'LAST ONE!', '#ffd60a', 30));
+    }
+  }
 
   // Title-unlock detection. Most pops won't unlock anything — newlyEarnedTitles
   // returns [] in steady state — so this is cheap. When something DOES unlock,

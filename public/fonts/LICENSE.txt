@@ -1,0 +1,9 @@
+Self-hosted webfonts (latin subsets, woff2):
+
+- Bowlby One — Copyright 2011 The Bowlby One Project Authors
+  (https://github.com/googlefonts/bowlbyFont)
+- Inter (variable) — Copyright 2016 The Inter Project Authors
+  (https://github.com/rsms/inter)
+
+Both are licensed under the SIL Open Font License, Version 1.1.
+Full license text: https://openfontlicense.org

@@ -323,8 +323,10 @@ export function flushHoverSound() {
  */
 /**
  * Mobile-only auto-fire driver. Called once per frame from game.update().
+ * Auto-fire is ALWAYS the touch firing model — there is no on-screen FIRE
+ * button (movement zones own the whole stage).
  *
- * Active iff: touch device AND user opted in (Storage.mobileAutoFire)
+ * Active iff: touch device
  *          AND state === PLAYING
  *          AND there is a live (non-dead) player
  *          AND the intro banner has dismissed

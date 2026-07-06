@@ -151,7 +151,7 @@ export function renderPause(game: Game) {
   ctx.strokeStyle = mtHover ? '#fff' : 'rgba(255,255,255,0.4)';
   roundRect(ctx, mt.x, mt.y, mt.w, mt.h, 10, false, true);
   ctx.font = 'bold 15px sans-serif';
-  ctx.fillStyle = mtOn ? '#fff' : '#fff';
+  ctx.fillStyle = '#fff';
   ctx.textAlign = 'center';
   ctx.fillText((mtOn ? '🔇 Muted' : '🔊 Sound'), mt.x + mt.w / 2, mt.y + 26);
 

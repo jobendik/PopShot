@@ -17,7 +17,6 @@
 import { LEVELS } from '../../data/levels';
 import { State } from '../../constants';
 import { AudioSys } from '../../systems/audio';
-import { isFullscreenSupported, toggleFullscreen, syncFullscreenButtons } from '../../systems/fullscreen';
 import {
   dismissWelcomeBack,
   getWelcomeBackBanner,
@@ -129,20 +128,8 @@ export function buildMainMenu(game: Game): HTMLElement {
   });
   root.appendChild(soundBtn);
 
-  // --- Fullscreen toggle (top-right, left of sound) ---
-  // CrazyGames-recommended. Hidden on platforms without element fullscreen
-  // (iOS Safari) so we never show a button that does nothing.
-  if (isFullscreenSupported()) {
-    const fsBtn = document.createElement('button');
-    fsBtn.type = 'button';
-    fsBtn.className = 'menu__fullscreen';
-    fsBtn.dataset.role = 'fullscreen-toggle';
-    fsBtn.setAttribute('aria-label', 'Enter fullscreen');
-    fsBtn.textContent = '⛶';
-    fsBtn.addEventListener('click', () => toggleFullscreen());
-    root.appendChild(fsBtn);
-    syncFullscreenButtons(); // set initial icon/state
-  }
+  // NOTE: no custom fullscreen button — CrazyGames provides its own iframe
+  // fullscreen control and rejects games that ship a second one.
 
   // --- Drifting bubbles (12 of them, positions/scales derived from --i) ---
   const bubbles = document.createElement('div');
@@ -199,7 +186,7 @@ export function buildMainMenu(game: Game): HTMLElement {
     <span class="menu__play-sub"   data-role="play-sub">Start the adventure</span>
   `;
   playBtn.addEventListener('click', () => {
-    AudioSys.menu();
+    AudioSys.confirm();
     game.startTour(getResumeLevel(game));
   });
   cta.appendChild(playBtn);
@@ -218,7 +205,7 @@ export function buildMainMenu(game: Game): HTMLElement {
     <span class="menu__daily-badge"  data-role="daily-badge"  hidden>NEW</span>
   `;
   dailyBtn.addEventListener('click', () => {
-    AudioSys.menu();
+    AudioSys.confirm();
     game.openDaily();
   });
   cta.appendChild(dailyBtn);
@@ -237,7 +224,7 @@ export function buildMainMenu(game: Game): HTMLElement {
     <span class="menu__daily-badge" data-role="weekly-badge">EVENT</span>
   `;
   weeklyBtn.addEventListener('click', () => {
-    AudioSys.menu();
+    AudioSys.confirm();
     const { mode } = getWeeklyEvent();
     if (mode === 'panic') game.startPanic();
     else game.startScoreAttack();
@@ -301,6 +288,7 @@ export function buildMainMenu(game: Game): HTMLElement {
     weeklyTitle: weeklyBtn.querySelector('[data-role="weekly-title"]') as HTMLElement,
     weeklySub:   weeklyBtn.querySelector('[data-role="weekly-sub"]')   as HTMLElement,
     weeklyBest:  weeklyBtn.querySelector('[data-role="weekly-best"]')  as HTMLElement,
+    missions,
     missionStars: missions.querySelector('[data-role="mission-stars"]') as HTMLElement,
     missionsList: missions.querySelector('[data-role="missions"]') as HTMLElement,
     nextUnlock: missions.querySelector('[data-role="next-unlock"]') as HTMLElement,
@@ -319,7 +307,7 @@ interface Refs {
   playBtn: HTMLElement; playLabel: HTMLElement; playSub: HTMLElement;
   dailyBtn: HTMLElement; dailySub: HTMLElement; dailyStreak: HTMLElement; dailyBadge: HTMLElement;
   weeklyBtn: HTMLElement; weeklyTitle: HTMLElement; weeklySub: HTMLElement; weeklyBest: HTMLElement;
-  missionStars: HTMLElement; missionsList: HTMLElement; nextUnlock: HTMLElement;
+  missions: HTMLElement; missionStars: HTMLElement; missionsList: HTMLElement; nextUnlock: HTMLElement;
   footerHint: HTMLElement;
 }
 
@@ -355,6 +343,16 @@ export function syncMainMenu(game: Game, root: HTMLElement) {
   refs.dailyBadge.hidden  = !isHot;
   refs.dailyStreak.hidden = streak <= 0;
   if (streak > 0) setText(refs.dailyStreak, '🔥 ' + streak);
+
+  // --- New-player declutter ---
+  // Until the player has cleared their first level, the front screen keeps a
+  // single loud CTA: PLAY. The weekly-event card and daily-missions widget
+  // are meta a newcomer can't parse yet — hiding them stops six widgets from
+  // competing for a second-session player's attention. (Daily stays visible:
+  // it is the game's core retention hook and self-explains.)
+  const isNewPlayer = game.unlockedLevel <= 0;
+  refs.weeklyBtn.hidden = isNewPlayer;
+  refs.missions.hidden = isNewPlayer;
 
   // --- Weekly event (mode-aware) ---
   const weekly = getWeeklyEvent();
@@ -393,14 +391,8 @@ export function syncMainMenu(game: Game, root: HTMLElement) {
   setText(refs.soundBtn, AudioSys.muted ? '🔇' : '🔊');
 
   // --- Idle-hint rotation (footer cross-fade) ---
-  // Bump on any keyboard or pointer activity in the last frame. The
-  // canvas-pointer event listener still records pointer.x changes; we
-  // detect engagement by sampling a coarse hash of the input state.
-  const inputSignal = (game as any).t * 0 + Date.now(); // sentinel; real engagement triggers below
-  void inputSignal;
-  // Idle clock: track last activity by listening for any window event.
-  // Simpler: read game.t and reset on click of any menu element via a
-  // bubbling listener attached in mountIdleResetOnce().
+  // Idle clock: track last activity via a bubbling listener attached in
+  // mountIdleResetOnce(); read game.t as the canonical timebase.
   mountIdleResetOnce(root);
   const lastInput = (root as any).__lastInputT as number;
   const idle = game.t - lastInput;

@@ -332,6 +332,18 @@ export class Projectile {
       // capped by the shared barbed steel spearhead.
       ctx.save();
       ctx.lineCap = 'round';
+      // Comet-glow trail behind the rising tip — sells the shot's speed and
+      // makes the projectile pop against dark backgrounds (pure draw-time,
+      // no particle allocation).
+      const tail = Math.min(80, this.startY - this.tipY);
+      if (tail > 8) {
+        const g = ctx.createLinearGradient(0, this.tipY + tail, 0, this.tipY);
+        g.addColorStop(0, 'rgba(255,214,10,0)');
+        g.addColorStop(1, 'rgba(255,214,10,0.5)');
+        ctx.strokeStyle = g;
+        ctx.lineWidth = 9;
+        ctx.beginPath(); ctx.moveTo(this.x, this.tipY + tail); ctx.lineTo(this.x, this.tipY + 2); ctx.stroke();
+      }
       ctx.strokeStyle = INK;
       ctx.lineWidth = 4;
       ctx.beginPath(); ctx.moveTo(this.x, this.startY); ctx.lineTo(this.x, this.tipY + 2); ctx.stroke();
@@ -340,15 +352,18 @@ export class Projectile {
       ctx.beginPath(); ctx.moveTo(this.x, this.startY); ctx.lineTo(this.x, this.tipY + 2); ctx.stroke();
       ctx.restore();
       drawSpearhead(ctx, this.x, this.tipY);
-    } else if (this.type === 'bullet') {
-      ctx.fillStyle = '#fff7ad';
+    } else if (this.type === 'bullet' || this.type === 'pellet') {
+      // Short comet tail beneath the slug — same treatment as the harpoon tip.
+      const g = ctx.createLinearGradient(0, this.y + this.h + 20, 0, this.y + this.h);
+      g.addColorStop(0, 'rgba(255,214,10,0)');
+      g.addColorStop(1, 'rgba(255,214,10,0.45)');
+      ctx.strokeStyle = g;
+      ctx.lineWidth = this.w + 2;
+      ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(this.x, this.y + this.h + 20); ctx.lineTo(this.x, this.y + this.h); ctx.stroke();
+      ctx.fillStyle = this.type === 'bullet' ? '#fff7ad' : PAL.amber;
       ctx.strokeStyle = INK;
-      ctx.lineWidth = 1.4;
-      roundRect(ctx, this.x - this.w / 2, this.y, this.w, this.h, 2, true, true);
-    } else if (this.type === 'pellet') {
-      ctx.fillStyle = PAL.amber;
-      ctx.strokeStyle = INK;
-      ctx.lineWidth = 1.2;
+      ctx.lineWidth = this.type === 'bullet' ? 1.4 : 1.2;
       roundRect(ctx, this.x - this.w / 2, this.y, this.w, this.h, 2, true, true);
     } else if (this.type === 'laser') {
       const a = clamp(this.life / 0.2, 0, 1);

@@ -190,6 +190,10 @@ export class Game {
   preRunStageBest: number;
   /** Age of the first-run control hint, or -1 when inactive. */
   firstRunHintAge: number;
+  /** True once this level's "LAST ONE!" slow-mo beat has fired — a splitting
+   *  ball can bring the alive count back down to 1 repeatedly, and the beat
+   *  should land exactly once per level. */
+  lastBallSlowmo: boolean;
 
   constructor() {
     const canvas = document.getElementById('game');
@@ -289,6 +293,7 @@ export class Game {
     this.preRunTotalXp = 0;
     this.preRunStageBest = 0;
     this.firstRunHintAge = -1;
+    this.lastBallSlowmo = false;
   }
 
   // ============================ LIFECYCLE ============================
@@ -391,6 +396,7 @@ export class Game {
     this.creatures = [];
     this.panicGauge = 0;
     this.panicStarTimer = 22;
+    this.lastBallSlowmo = false;
     this.player = new Player(W / 2, GROUND_Y - 0);
     this.player2 = null;
     this.player3 = null;
@@ -450,11 +456,10 @@ export class Game {
     this.levelScoreStart = this.score;
     this.introText = L.intro || '';
     // The level-1 tutorial line is written for keyboards; on touch devices
-    // describe the actual on-screen controls instead.
+    // describe the actual controls: half-screen hold zones + always-on
+    // auto-fire (there is no FIRE button on touch).
     if (index === 0 && isTouchDevice && L.intro) {
-      this.introText = Storage.data.mobileAutoFire
-        ? 'Hold ◀ ▶ to move — your cannon fires by itself.\nPop every ball to win!'
-        : 'Hold ◀ ▶ to move, hold FIRE to shoot.\nPop every ball to win!';
+      this.introText = 'Hold the LEFT or RIGHT side to move.\nYou fire automatically — pop every ball!';
     }
     this.introTimer = L.intro ? 4 : 0;
     this.introTitle = '';
@@ -503,6 +508,7 @@ export class Game {
       ? (Storage.data.bestTour[L.id] || 0)
       : 0;
     this.shake = 0; this.flash = 0; this.slowTime = 0; this.freezeTime = 0; this.magnetTime = 0; this.comboBoostTime = 0; this.hitPause = 0;
+    this.lastBallSlowmo = false;
     this.bossDefeatedTimer = 0; this.lastTimerWarning = 0;
     this.player = new Player(W / 2, GROUND_Y);
     // Brief spawn protection so the opening seconds (often spent reading the
