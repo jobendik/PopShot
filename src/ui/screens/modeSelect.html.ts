@@ -17,12 +17,12 @@ interface ModeDef {
 }
 
 const MODES: ModeDef[] = [
-  { key: 'tour',         icon: '⛰', title: 'Tour',         desc: 'The campaign. 24 stages across 6 worlds + boss.' },
-  { key: 'score_attack', icon: '⏱', title: 'Score Attack', desc: '3 lives, no continues. Beat your best.',
+  { key: 'tour',         icon: '⛰', title: 'Tour',         desc: 'The adventure: 27 stages, 6 worlds, 3 bosses.' },
+  { key: 'score_attack', icon: '⏱', title: 'Score Attack', desc: '3 lives. The whole Tour. One score to beat.',
     bestKey: 'bestScoreAttack', bestLabel: 'Best score' },
-  { key: 'panic',        icon: '⚡', title: 'Panic Mode',   desc: 'Endless waves with a Rainbow Gauge and Star Bubbles.',
+  { key: 'panic',        icon: '⚡', title: 'Panic Mode',   desc: 'Endless waves through rotating zones. How far can you get?',
     bestKey: 'bestPanicWave', bestLabel: 'Best wave' },
-  { key: 'boss_rush',    icon: '☠', title: 'Boss Rush',    desc: 'Defeat every boss in sequence. No retries.',
+  { key: 'boss_rush',    icon: '☠', title: 'Boss Rush',    desc: 'All three bosses back to back, on one set of lives.',
     bestKey: 'bestBossRush', bestLabel: 'Best score' },
   { key: 'back',         icon: '←', title: 'Back',          desc: 'Return to main menu.' },
 ];

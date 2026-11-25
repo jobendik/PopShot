@@ -47,9 +47,12 @@ export function advanceFromLevelClear(game: Game): void {
   game.sessionLevelsCleared++;
   if (shouldAd) {
     game.awaitingAd = true;
+    const token = game.runToken;
     Sdk.gameplayStop();
     Sdk.requestMidgameAd().finally(() => {
       game.awaitingAd = false;
+      // Only advance if the player is still sitting on this result screen.
+      if (game.runToken !== token || game.state !== State.LEVEL_CLEAR) return;
       game.loadLevel(targetIndex);
     });
   } else {

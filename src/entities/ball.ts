@@ -92,6 +92,9 @@ export class Ball {
   bumperCd: number;
   /** Held in a boss tractor beam: physics is suspended, the boss moves it. */
   held: boolean;
+  /** Consecutive generations popped without touching the floor. Drives the
+   *  JUGGLE trick: this ball's parent was itself caught in the air. */
+  airGen: number;
   constructor(x, y, size, type: BallType = 'normal', vx = 0, vy = 0) {
     this.id = nextBallId++;
     this.x = x; this.y = y;
@@ -105,7 +108,10 @@ export class Ball {
     this.dead = false;
     this.spin = 0;
     // Type-specific state
-    this.armorHits = (type === 'armored') ? 1 : 0;  // remaining armor
+    // Only the big armored balls carry plating. Once one is small enough it is
+    // bare, cracked steel: the plating is a problem to solve at the top of the
+    // family tree, not a tax on every one of its fifteen descendants.
+    this.armorHits = (type === 'armored' && size >= 2) ? 1 : 0;
     this.fuse = 0;                                   // explosive fuse
     this.electricCharge = grand(2.2, 3.6);           // electric ball discharge timer
     this.smokeTimer = 0;                             // smoke ball periodic puffs
@@ -129,6 +135,7 @@ export class Ball {
     this.surfaceFx = 0;
     this.bumperCd = 0;
     this.held = false;
+    this.airGen = 0;
   }
 
   /** Mark for split. Children inherit position, opposite horizontal velocities.
@@ -154,6 +161,7 @@ export class Ball {
       );
       child.bornT = 0.16;
       child.arcImmune = 0.55;
+      child.airGen = this.floorBounces === 0 ? this.airGen + 1 : 0;
       child.driftVx = this.driftVx * 0.5;
       if (this.cascade) {
         // Ripple: each generation pops a beat after the last, the two
@@ -279,9 +287,11 @@ export class Ball {
       // ball bounces there. Lava superheats (higher, floatier arc); slime is
       // sticky (a low, fast, dangerous hop). Both are visible on the floor
       // before the ball lands, so the altered arc is readable in advance.
-      const patch = floorPatchAt(game, this.x);
+      // (The tiniest balls are too light to be affected — a low-hopping
+      // size-0 ball would be nearly impossible to run under.)
+      const patch = this.size >= 1 ? floorPatchAt(game, this.x) : null;
       if (patch === 'lava') { bounceMult *= 1.2; this.surfaceFx = 1; }
-      else if (patch === 'slime') { bounceMult *= 0.74; this.surfaceFx = -1; }
+      else if (patch === 'slime') { bounceMult *= 0.78; this.surfaceFx = -1; }
       this.vy = -BALL_BOUNCE[this.size] * bounceMult;
       if (this.type === 'hexagon') {
         // Tiny direction jitter — never enough to flip sign, just enough to
@@ -293,13 +303,15 @@ export class Ball {
       this.squashTime = 0.18;
       this.floorBounces++;
       AudioSys.bounce(this.size);
-      // Lava ball drips on bounce
-      if (this.type === 'lava' && gchance(0.6)) {
+      // Lava ball drips on bounce — big balls often, small ones rarely, the
+      // tiniest never, so a split family doesn't carpet the whole floor.
+      const drip = [0, 0.28, 0.45, 0.6, 0.6][this.size];
+      if (this.type === 'lava' && gchance(drip)) {
         game.hazards.push(new Hazard('lava', this.x - 18, GROUND_Y - 4, 36, 8, 3.5));
         AudioSys.sfx('hazard/lava_drop', 0.35);
       }
       // Sludge drops slime
-      if (this.type === 'sludge' && gchance(0.5)) {
+      if (this.type === 'sludge' && gchance(drip * 0.85)) {
         game.hazards.push(new Hazard('slime', this.x - 22, GROUND_Y - 4, 44, 8, 4));
         AudioSys.sfx('hazard/slime_drop', 0.35);
       }

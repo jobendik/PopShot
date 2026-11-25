@@ -8,9 +8,10 @@ import { UI } from '../ui/domRoot';
 import type { Game } from '../game';
 
 // Layout constants shared by update (hit-testing) and the legacy canvas
-// render. COLS matches the HTML grid (.levels__grid, 6 columns) so the
-// keyboard cursor moves the way the screen looks.
-const COLS = 6;
+// render. COLS matches the HTML grid (.levels__grid: 9 columns = two worlds
+// of four stages + their boss) so the keyboard cursor moves the way the
+// screen looks.
+const COLS = 9;
 const CELL_W = 140;
 const CELL_H = 68;
 const GAP = 8;
@@ -29,22 +30,6 @@ export function updateLevelSelect(game: Game) {
   if (consumePressed('ArrowUp')    || consumePressed('KeyW')) { game.levelSelectIndex = Math.max(0, game.levelSelectIndex - COLS); AudioSys.menu(); }
   if (consumePressed('ArrowDown')  || consumePressed('KeyS')) { game.levelSelectIndex = Math.min(maxLevel, game.levelSelectIndex + COLS); AudioSys.menu(); }
   if (consumePressed('Escape')) { game.state = State.MAIN_MENU; AudioSys.menu(); return; }
-  // Click on a tile = pick + start (legacy canvas hit-test; the HTML grid's
-  // buttons handle clicks themselves and already respect the lock state).
-  if (pointer.pressed) {
-    const startX = gridOrigin();
-    for (let i = 0; i <= maxLevel; i++) {
-      const cx = startX + (i % COLS) * (CELL_W + GAP);
-      const cy = START_Y + Math.floor(i / COLS) * (CELL_H + GAP);
-      if (pointerHit(cx, cy, CELL_W, CELL_H)) {
-        pointer.pressed = false;
-        game.levelSelectIndex = i;
-        AudioSys.menu();
-        game.startTour(i);
-        return;
-      }
-    }
-  }
   if (consumeAnyConfirm() && game.levelSelectIndex <= game.unlockedLevel) {
     AudioSys.menu();
     game.startTour(game.levelSelectIndex);

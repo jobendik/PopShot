@@ -101,7 +101,7 @@ export class Fan {
   onTime: number;
   offTime: number;
   spin: number;
-  constructor(x: number, w = 120, onTime = 3.2, offTime = 3.4, phase = 0, top = 90, lift = 1500) {
+  constructor(x: number, w = 120, onTime = 2.4, offTime = 4.2, phase = 0, top = 90, lift = 1180) {
     this.x = x; this.w = w; this.top = top; this.lift = lift;
     this.power = 0;
     this.phase = phase;

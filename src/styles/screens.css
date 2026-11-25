@@ -682,23 +682,26 @@
    ===================================================================== */
 
 /* .levels — combine with .menu-backdrop in HTML. */
-.levels__title { z-index: 3; margin-bottom: clamp(8px, 1.6cqi, 16px); animation: drop-in 600ms var(--ease-out) both; }
+.levels__title { z-index: 3; margin-bottom: clamp(6px, 1.2cqi, 12px); animation: drop-in 600ms var(--ease-out) both; }
+/* Three acts × (two worlds of four stages + their boss) = a 9-column grid. */
 .levels__grid {
   position: relative;
   z-index: 3;
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: clamp(8px, 1.4cqi, 14px);
-  width: min(720px, 94cqi);
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  gap: clamp(5px, 1cqi, 10px);
+  width: min(900px, 95cqi);
   animation: drop-in 700ms 60ms var(--ease-out) both;
 }
 .level-cell {
+  --tile-accent: var(--brand-cyan);
   position: relative;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 1 / 1.02;
   background:
     var(--panel-strip),
     linear-gradient(180deg, var(--panel-fill) 0%, var(--panel-fill-2) 100%);
   border: 2px solid var(--ink);
+  border-top: 5px solid var(--tile-accent);
   border-radius: var(--radius-md);
   cursor: pointer;
   font: inherit;
@@ -707,39 +710,74 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 4px;
+  gap: clamp(1px, 0.4cqi, 4px);
+  padding: 3px;
   box-shadow: var(--panel-shadow-sm);
   transition: transform var(--dur-fast), border-color var(--dur-fast), box-shadow var(--dur-fast);
 }
+/* Each world tints its tiles, so the six worlds read as six bands of colour. */
+.level-cell--beach   { --tile-accent: #56cbf9; }
+.level-cell--desert  { --tile-accent: #ff9e6b; }
+.level-cell--arctic  { --tile-accent: #9be7ff; }
+.level-cell--city    { --tile-accent: #ffe66d; }
+.level-cell--volcano { --tile-accent: #ff5400; }
+.level-cell--airship { --tile-accent: #f4d35e; }
+.level-cell--boss    { --tile-accent: #ff2b88; }
 .level-cell:hover, .level-cell:focus-visible {
-  transform: translateY(-2px) scale(1.04);
+  transform: translateY(-2px) scale(1.05);
   border-color: var(--brand-yellow);
   box-shadow: 0 6px 0 var(--ink), 0 14px 28px rgba(0, 0, 0, 0.5);
   outline: none;
   z-index: 2;
 }
-.level-cell.is-locked { opacity: 0.4; cursor: not-allowed; filter: grayscale(0.8); }
+.level-cell.is-locked { opacity: 0.42; cursor: not-allowed; filter: grayscale(0.85); }
 .level-cell.is-selected {
   border-color: var(--brand-yellow);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand-yellow) 60%, transparent), var(--panel-shadow-sm);
 }
-/* The boss occupies its own full-width banner row at the bottom of the grid —
-   a deliberate finale, and it keeps the 4-per-world grid rows clean. */
+/* Boss tiles close each act: same footprint as a stage, unmistakably hotter. */
 .level-cell.is-boss {
-  grid-column: 1 / -1;
-  aspect-ratio: auto;
-  min-height: 56px;
-  flex-direction: row;
-  gap: clamp(8px, 1.6cqi, 16px);
+  --tile-accent: var(--brand-pink);
   border-color: color-mix(in srgb, var(--brand-pink) 80%, transparent);
+  border-top-color: var(--brand-pink);
+  background:
+    var(--panel-strip),
+    linear-gradient(180deg, #3a0a2c 0%, #1a0616 100%);
   box-shadow: 0 0 14px rgba(255, 77, 109, 0.35);
 }
-.level-cell.is-boss .level-cell__theme,
-.level-cell.is-boss .level-cell__medal { margin-top: 0; }
 .level-cell.is-boss .level-cell__theme { color: var(--brand-pink); opacity: 1; letter-spacing: 0.18em; }
-.level-cell__num    { font-family: var(--font-display); font-size: var(--fs-h2); line-height: 1; color: var(--brand-yellow); }
-.level-cell__medal  { font-size: var(--fs-small); letter-spacing: 0.12em; margin-top: 2px; }
-.level-cell__theme  { font-size: var(--fs-micro); opacity: 0.6; margin-top: 4px; letter-spacing: 0.1em; text-transform: uppercase; }
+.level-cell__num    { font-family: var(--font-display); font-size: clamp(1rem, 3.1cqi, 1.9rem); line-height: 1; color: var(--brand-yellow); }
+.level-cell__num--boss { font-size: clamp(0.5rem, 1.25cqi, 0.82rem); text-align: center; line-height: 1.15; letter-spacing: 0.04em; }
+.level-cell__medal  { display: flex; gap: 3px; align-items: center; min-height: clamp(7px, 1.3cqi, 12px); }
+.level-cell__theme  { font-size: clamp(0.42rem, 1.02cqi, 0.66rem); opacity: 0.72; letter-spacing: 0.1em; text-transform: uppercase; color: var(--tile-accent); }
+.level-cell__lock   { font-size: clamp(0.4rem, 0.9cqi, 0.58rem); letter-spacing: 0.14em; opacity: 0.8; }
+.pip {
+  display: inline-block;
+  width: clamp(6px, 1.15cqi, 11px);
+  height: clamp(6px, 1.15cqi, 11px);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1.5px solid rgba(255, 255, 255, 0.22);
+}
+.pip--bronze { background: #cd7f32; border-color: #7a4410; }
+.pip--silver { background: #dfe6ee; border-color: #77828f; }
+.pip--gold   { background: #ffd60a; border-color: #8a6a00; box-shadow: 0 0 6px rgba(255, 214, 10, 0.7); }
+.levels__info {
+  position: relative;
+  z-index: 3;
+  margin-top: clamp(8px, 1.6cqi, 16px);
+  padding: 6px 16px;
+  font-size: var(--fs-small);
+  letter-spacing: 0.06em;
+  color: var(--paper);
+  background: rgba(10, 24, 50, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: var(--radius-pill);
+  max-width: 94cqi;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .medal--gold    { color: #ffd60a; text-shadow: 0 0 6px rgba(255,214,10,0.6); }
 .medal--silver  { color: #cfd6df; }
 .medal--bronze  { color: #cd7f32; }
@@ -758,6 +796,33 @@
   animation: drop-in 600ms var(--ease-out) both;
 }
 .info__title { margin-bottom: clamp(8px, 1.6cqi, 16px); text-align: center; }
+/* How to Play: controls on the left, the scoring systems on the right. */
+.info--howto .info__panel { width: min(900px, 95cqi); }
+.info--howto .info__title { font-size: clamp(1.4rem, 4.4cqi, 2.6rem); margin-bottom: clamp(4px, 1cqi, 10px); }
+.howto { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: clamp(12px, 2.4cqi, 28px); align-items: start; }
+.howto__head {
+  font-family: var(--font-display);
+  font-size: var(--fs-small);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--brand-cyan);
+  margin-bottom: 4px;
+}
+.howto .info__row { padding-block: clamp(3px, 0.7cqi, 7px); }
+.howto__tip {
+  display: grid;
+  grid-template-columns: clamp(78px, 11cqi, 104px) minmax(0, 1fr);
+  gap: 10px;
+  padding: clamp(3px, 0.7cqi, 6px) 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  font-size: var(--fs-small);
+  line-height: 1.35;
+}
+.howto__tip b { font-family: var(--font-display); font-weight: 400; letter-spacing: 0.06em; font-size: var(--fs-micro); padding-top: 2px; }
+.howto__tip span { opacity: 0.9; }
+@container (max-width: 560px) {
+  .howto { grid-template-columns: minmax(0, 1fr); }
+}
 .info__rows { display: flex; flex-direction: column; gap: 0; }
 .info__row {
   display: flex;
@@ -2155,10 +2220,9 @@
   .menu .menu__welcome     { display: none; }
 }
 
-/* ---- Level select: reduce to fewer columns on narrow stages ---- */
-@container (max-width: 500px) {
-  .levels__grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-}
-@container (max-width: 380px) {
-  .levels__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+/* ---- Level select: the 9-column act layout holds at every stage size; on a
+   very narrow stage the world label is dropped so the number stays legible. */
+@container (max-width: 520px) {
+  .level-cell__theme { display: none; }
+  .levels__info { font-size: var(--fs-micro); }
 }

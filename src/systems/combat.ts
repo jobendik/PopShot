@@ -215,19 +215,21 @@ export function creditPop(game: Game, ball: Ball, source: PopSource, childCount 
     const owner = source.owner || game.player;
     const playerDist = owner ? Math.hypot(ball.x - owner.x, ball.y - (owner.y - 22)) : Infinity;
     const sinceWall = ball.age - ball.lastWallTime;
+    // Tricks are meant to be noticed, so each one has to be earned: the bar
+    // is "the player did something a careful player would not have".
     if (isLastBall && game.mode !== 'panic' && !game.bossLevel && game.timer > 0 && game.timer < 3) {
       awardTrick(game, 'clutch', 'CLUTCH!', 400, '#ff36c4', ball.x, ball.y - 34);
-    } else if (playerDist < 82) {
-      // The player held their ground under a falling ball.
-      awardTrick(game, 'close_call', 'CLOSE CALL', 90, '#ff7f50', ball.x, ball.y - 34);
-    } else if (ball.floorBounces === 0 && ball.age > 0.4 && ball.bornT <= 0) {
-      // Caught on the fly before it ever touched the floor.
-      awardTrick(game, 'air_pop', 'AIR POP', 60, '#9be7ff', ball.x, ball.y - 34);
-    } else if (sinceWall >= 0 && sinceWall < 0.35) {
+    } else if (playerDist < 66 && ball.vy > 40) {
+      // Stood their ground under a ball that was already coming down on them.
+      awardTrick(game, 'close_call', 'CLOSE CALL', 100, '#ff7f50', ball.x, ball.y - 34);
+    } else if (ball.floorBounces === 0 && ball.airGen >= 2 && ball.bornT <= 0) {
+      // Third generation in a row caught before any of them touched the floor.
+      awardTrick(game, 'air_pop', 'JUGGLE', 80 + Math.min(4, ball.airGen - 2) * 40, '#9be7ff', ball.x, ball.y - 34);
+    } else if (sinceWall >= 0 && sinceWall < 0.22 && ball.size >= 1) {
       awardTrick(game, 'bank_shot', 'BANK SHOT', 60, '#06d6a0', ball.x, ball.y - 34);
-    } else if (Math.abs(ball.vy) < 46 && ball.floorBounces > 0 && ball.size >= 1) {
+    } else if (Math.abs(ball.vy) < 28 && ball.floorBounces > 0 && ball.size >= 2) {
       // Hit dead on the top of its arc — the hardest moment to time.
-      awardTrick(game, 'apex', 'APEX', 50, '#e0b3ff', ball.x, ball.y - 34);
+      awardTrick(game, 'apex', 'APEX', 60, '#e0b3ff', ball.x, ball.y - 34);
     }
   }
 
@@ -457,7 +459,14 @@ export function killPlayer(game: Game, player: Player, reason: DeathReason = 'un
   }
   player.dead = true;
   player.deathT = 0;
+  player.deathVx = (player.x < W / 2 ? 1 : -1) * rand(40, 120);
   game.lastDeathReason = reason;
+  // Diagnostics for the simulator / tests: what exactly was closest.
+  if (reason === 'ball') {
+    let near: Ball | null = null, nd = Infinity;
+    for (const b of game.balls) { const d = Math.hypot(b.x - player.x, b.y - (player.y - 22)) - b.r; if (d < nd) { nd = d; near = b; } }
+    game.lastDeathInfo = near ? { size: near.size, type: near.type, age: +near.age.toFixed(2), vy: Math.round(near.vy), y: Math.round(near.y), simT: +game.simT.toFixed(1) } : null;
+  } else game.lastDeathInfo = null;
   game.levelDeaths++;
   AudioSys.hurt();
   Haptics.death();

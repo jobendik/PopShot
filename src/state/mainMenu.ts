@@ -13,7 +13,7 @@ const SECONDARY = [
   { key: 'levels',   label: 'Levels' },
   { key: 'modes',    label: 'Modes' },
   { key: 'stats',    label: 'Stats' },
-  { key: 'controls', label: 'Controls' },
+  { key: 'controls', label: 'How to Play' },
   { key: 'credits',  label: 'Credits' },
 ] as const;
 

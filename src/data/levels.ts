@@ -109,14 +109,14 @@ export interface LevelDefinition {
 export const LEVELS = [
   // ================= WORLD 1 — BEACH =================
   {
-    id: 'beach_1', name: 'Beach Day', theme: 'beach', timeLimit: 50, targetScore: 3200,
+    id: 'beach_1', name: 'Beach Day', theme: 'beach', timeLimit: 50, targetScore: 3400,
     balls: [{ x: 620, y: 200, size: 3, type: 'normal', vx: 115, vy: 0 }],
     platforms: [], destructibles: [], pickups: [],
     intro: 'Move with A/D or the arrow keys. Shoot UP with Space.\nPop every ball to win!',
     introTouch: 'Hold the LEFT or RIGHT side to move.\nYou fire automatically — pop every ball!',
   },
   {
-    id: 'beach_2', name: 'Chain Reaction', theme: 'beach', timeLimit: 55, targetScore: 6200,
+    id: 'beach_2', name: 'Chain Reaction', theme: 'beach', timeLimit: 55, targetScore: 7600,
     balls: [
       { x: 300, y: 180, size: 3, type: 'normal', vx: -115 },
       { x: 660, y: 180, size: 3, type: 'normal', vx: 115 }
@@ -125,7 +125,7 @@ export const LEVELS = [
     intro: 'Every pop extends your CHAIN — and your multiplier.\nKeep popping before the ring runs out!',
   },
   {
-    id: 'beach_3', name: 'Sandcastles', theme: 'beach', timeLimit: 65, targetScore: 6800,
+    id: 'beach_3', name: 'Sandcastles', theme: 'beach', timeLimit: 65, targetScore: 7200,
     balls: [{ x: 250, y: 160, size: 4, type: 'normal', vx: 95 }],
     platforms: [
       { x: 210, y: 350, w: 180, h: 16 },
@@ -136,7 +136,7 @@ export const LEVELS = [
     introTouch: 'Platforms bounce balls and block your shots.\nCornered? DOUBLE-TAP a side to DASH through danger.',
   },
   {
-    id: 'beach_4', name: 'Crab Rave', theme: 'beach', timeLimit: 60, targetScore: 8200,
+    id: 'beach_4', name: 'Crab Rave', theme: 'beach', timeLimit: 60, targetScore: 13000,
     balls: [
       { x: 240, y: 200, size: 3, type: 'normal', vx: -115 },
       { x: 720, y: 200, size: 3, type: 'normal', vx: 115 },
@@ -150,7 +150,7 @@ export const LEVELS = [
 
   // ================= WORLD 2 — DESERT =================
   {
-    id: 'desert_1', name: 'Live Wires', theme: 'desert', timeLimit: 60, targetScore: 7800,
+    id: 'desert_1', name: 'Live Wires', theme: 'desert', timeLimit: 60, targetScore: 10400,
     balls: [
       { x: 250, y: 170, size: 3, type: 'electric', vx: 115 },
       { x: 330, y: 230, size: 2, type: 'normal', vx: 140 },
@@ -160,7 +160,7 @@ export const LEVELS = [
     intro: 'Pop an electric ball and its charge ARCS to the nearest ball.\nMind the bolt it drops — the dashed line shows where.',
   },
   {
-    id: 'desert_2', name: 'Dust Devils', theme: 'desert', timeLimit: 65, targetScore: 7800,
+    id: 'desert_2', name: 'Dust Devils', theme: 'desert', timeLimit: 80, targetScore: 7600,
     balls: [
       { x: 200, y: 190, size: 3, type: 'normal', vx: -115 },
       { x: 760, y: 190, size: 3, type: 'normal', vx: 115 },
@@ -176,7 +176,7 @@ export const LEVELS = [
     intro: 'Sandstorm! Gusts shove every ball sideways.\nThe streaks warn you which way before it blows.',
   },
   {
-    id: 'desert_3', name: 'Boom Town', theme: 'desert', timeLimit: 60, targetScore: 6600,
+    id: 'desert_3', name: 'Boom Town', theme: 'desert', timeLimit: 60, targetScore: 4400,
     balls: [
       { x: 250, y: 170, size: 3, type: 'explosive', vx: 115 },
       { x: 330, y: 240, size: 2, type: 'normal', vx: 140 },
@@ -189,11 +189,11 @@ export const LEVELS = [
     intro: 'Shoot a bomb ball to light its fuse — everything in the ring pops.\nThe RED core is lethal. Light it, then get clear!',
   },
   {
-    id: 'desert_4', name: 'Heat Wave', theme: 'desert', timeLimit: 70, targetScore: 9000,
+    id: 'desert_4', name: 'Heat Wave', theme: 'desert', timeLimit: 80, targetScore: 6200,
     balls: [
       { x: 230, y: 170, size: 3, type: 'lava', vx: -115 },
       { x: 730, y: 170, size: 3, type: 'normal', vx: 115 },
-      { x: 480, y: 130, size: 2, type: 'electric', vx: 140 }
+      { x: 480, y: 130, size: 1, type: 'electric', vx: 165 }
     ],
     platforms: [
       { x: 190, y: 350, w: 150, h: 16 },
@@ -201,11 +201,11 @@ export const LEVELS = [
     ],
     destructibles: [{ x: 460, y: 448, w: 40, h: 40, contains: 'laser' }],
     pickups: [],
-    wind: { strength: 220, gapMin: 5, gapMax: 8 },
+    wind: { strength: 180, gapMin: 6, gapMax: 9 },
     intro: 'Lava balls scorch the floor. Hot patches burn you —\nand launch any ball that lands on them much higher.',
   },
   {
-    id: 'boss_globo', name: 'King Globo', theme: 'desert', timeLimit: 150, targetScore: 9000,
+    id: 'boss_globo', name: 'King Globo', theme: 'desert', timeLimit: 150, targetScore: 6400,
     balls: [], platforms: [],
     destructibles: [{ x: 120, y: 448, w: 40, h: 40, contains: 'double' }],
     pickups: [{ x: 800, y: 420, type: 'shield' }],
@@ -215,7 +215,7 @@ export const LEVELS = [
 
   // ================= WORLD 3 — ARCTIC =================
   {
-    id: 'arctic_1', name: 'Black Ice', theme: 'arctic', timeLimit: 65, targetScore: 6400,
+    id: 'arctic_1', name: 'Black Ice', theme: 'arctic', timeLimit: 65, targetScore: 8000,
     balls: [
       { x: 240, y: 180, size: 3, type: 'normal', vx: -115 },
       { x: 720, y: 180, size: 3, type: 'normal', vx: 115 }
@@ -226,7 +226,7 @@ export const LEVELS = [
     intro: 'The floor is ice. You slide — brake early.\nA DASH still snaps you exactly where you point it.',
   },
   {
-    id: 'arctic_2', name: 'Whiteout', theme: 'arctic', timeLimit: 70, targetScore: 6800,
+    id: 'arctic_2', name: 'Whiteout', theme: 'arctic', timeLimit: 70, targetScore: 7400,
     balls: [
       { x: 250, y: 170, size: 4, type: 'smoke', vx: 95 }
     ],
@@ -237,7 +237,7 @@ export const LEVELS = [
     intro: 'Smoke balls fog the view as they travel.\nWatch the floor shadows — they never lie.',
   },
   {
-    id: 'arctic_3', name: 'Glacier Slime', theme: 'arctic', timeLimit: 65, targetScore: 8200,
+    id: 'arctic_3', name: 'Glacier Slime', theme: 'arctic', timeLimit: 65, targetScore: 10000,
     balls: [
       { x: 230, y: 180, size: 3, type: 'sludge', vx: -115 },
       { x: 730, y: 180, size: 3, type: 'sludge', vx: 115 },
@@ -249,7 +249,7 @@ export const LEVELS = [
     intro: 'Slime is sticky: balls landing on it bounce LOW and fast.\nOn ice, it is also the only place your treads grip.',
   },
   {
-    id: 'arctic_4', name: 'Iron Hail', theme: 'arctic', timeLimit: 80, targetScore: 8600,
+    id: 'arctic_4', name: 'Iron Hail', theme: 'arctic', timeLimit: 80, targetScore: 7600,
     balls: [
       { x: 230, y: 170, size: 3, type: 'armored', vx: 115 },
       { x: 730, y: 170, size: 3, type: 'armored', vx: -115 },
@@ -267,7 +267,7 @@ export const LEVELS = [
 
   // ================= WORLD 4 — CITY =================
   {
-    id: 'city_1', name: 'Tilt!', theme: 'city', timeLimit: 70, targetScore: 7400,
+    id: 'city_1', name: 'Tilt!', theme: 'city', timeLimit: 70, targetScore: 7800,
     balls: [
       { x: 220, y: 150, size: 3, type: 'normal', vx: 115 },
       { x: 740, y: 150, size: 3, type: 'normal', vx: -115 }
@@ -278,7 +278,7 @@ export const LEVELS = [
     intro: 'Neon City plays like pinball. Bumpers kick balls away\n— and block your shots. Read the rebound.',
   },
   {
-    id: 'city_2', name: 'Neon Barriers', theme: 'city', timeLimit: 75, targetScore: 8800,
+    id: 'city_2', name: 'Neon Barriers', theme: 'city', timeLimit: 75, targetScore: 10000,
     balls: [
       { x: 240, y: 150, size: 3, type: 'electric', vx: -115 },
       { x: 720, y: 190, size: 3, type: 'armored', vx: 115 },
@@ -293,7 +293,7 @@ export const LEVELS = [
     intro: 'Electric barriers pulse on and off. Time your crossing —\nor dash straight through the gap.',
   },
   {
-    id: 'city_3', name: 'Hex District', theme: 'city', timeLimit: 75, targetScore: 7800,
+    id: 'city_3', name: 'Hex District', theme: 'city', timeLimit: 75, targetScore: 7400,
     balls: [
       { x: 230, y: 170, size: 3, type: 'hexagon', vx: -135 },
       { x: 730, y: 170, size: 3, type: 'hexagon', vx: 135 }
@@ -305,7 +305,7 @@ export const LEVELS = [
     intro: 'Hexagons bounce on jagged, faster paths.\nDon\'t trust the rhythm — lead your shots.',
   },
   {
-    id: 'city_4', name: 'Night Flight', theme: 'city', timeLimit: 75, targetScore: 9400,
+    id: 'city_4', name: 'Night Flight', theme: 'city', timeLimit: 85, targetScore: 9000,
     balls: [
       { x: 220, y: 170, size: 3, type: 'normal', vx: -115 },
       { x: 740, y: 170, size: 3, type: 'normal', vx: 115 },
@@ -325,7 +325,7 @@ export const LEVELS = [
     intro: 'Birds jam your cannon for 3 seconds on contact.\nShoot them down first — or dodge around them.',
   },
   {
-    id: 'boss_volta', name: 'VOLTA', theme: 'city', timeLimit: 170, targetScore: 10000,
+    id: 'boss_volta', name: 'VOLTA', theme: 'city', timeLimit: 170, targetScore: 11400,
     balls: [], platforms: [],
     destructibles: [],
     pickups: [{ x: 150, y: 420, type: 'shield' }],
@@ -335,7 +335,7 @@ export const LEVELS = [
 
   // ================= WORLD 5 — VOLCANO =================
   {
-    id: 'volcano_1', name: 'Vent Field', theme: 'volcano', timeLimit: 75, targetScore: 7600,
+    id: 'volcano_1', name: 'Vent Field', theme: 'volcano', timeLimit: 75, targetScore: 7800,
     balls: [
       { x: 230, y: 160, size: 3, type: 'lava', vx: -115 },
       { x: 730, y: 160, size: 3, type: 'smoke', vx: 115 }
@@ -353,7 +353,7 @@ export const LEVELS = [
     intro: 'Flame vents glow before they flare.\nBombs clear clusters — and blow smoke away.',
   },
   {
-    id: 'volcano_2', name: 'Eruption', theme: 'volcano', timeLimit: 80, targetScore: 8400,
+    id: 'volcano_2', name: 'Eruption', theme: 'volcano', timeLimit: 80, targetScore: 6400,
     balls: [
       { x: 220, y: 140, size: 3, type: 'explosive', vx: -115 },
       { x: 740, y: 140, size: 3, type: 'sludge', vx: 115 },
@@ -366,7 +366,7 @@ export const LEVELS = [
     intro: 'The volcano erupts every few seconds.\nRed rings on the floor show exactly where rocks will land.',
   },
   {
-    id: 'volcano_3', name: 'Dragon\'s Den', theme: 'volcano', timeLimit: 75, targetScore: 9000,
+    id: 'volcano_3', name: 'Dragon\'s Den', theme: 'volcano', timeLimit: 75, targetScore: 9400,
     // Lava balls open near the walls heading outward, so the first bounces
     // happen far from the spawn point and the dragon's patrol.
     balls: [
@@ -383,7 +383,7 @@ export const LEVELS = [
     intro: 'The green dragon pops any ball it touches.\nLet it help — or shoot it for a parting blast.',
   },
   {
-    id: 'volcano_4', name: 'Ashfall', theme: 'volcano', timeLimit: 85, targetScore: 9600,
+    id: 'volcano_4', name: 'Ashfall', theme: 'volcano', timeLimit: 95, targetScore: 7000,
     balls: [
       { x: 230, y: 150, size: 3, type: 'armored', vx: -115 },
       { x: 730, y: 150, size: 3, type: 'armored', vx: 115 },
@@ -397,13 +397,13 @@ export const LEVELS = [
     pickups: [],
     hazards: [{ type: 'flame_vent', x: 362, y: 432, w: 36, h: 56, life: 999 }],
     creatures: [{ kind: 'red_bird', x: 480, y: 140, dir: 1 }],
-    eruption: { interval: 6, count: 3, first: 5 },
+    eruption: { interval: 7, count: 2, first: 5 },
     intro: 'The red bird always drops a power-up.\nCrack the armor with the bomb ball — and watch the sky.',
   },
 
   // ================= WORLD 6 — AIRSHIP =================
   {
-    id: 'airship_1', name: 'Updraft', theme: 'airship', timeLimit: 85, targetScore: 10200,
+    id: 'airship_1', name: 'Updraft', theme: 'airship', timeLimit: 100, targetScore: 16000,
     balls: [
       { x: 230, y: 150, size: 4, type: 'normal', vx: -95 },
       { x: 740, y: 150, size: 3, type: 'electric', vx: 115 }
@@ -416,11 +416,11 @@ export const LEVELS = [
       { x: 860, y: 448, w: 40, h: 40, contains: 'shuriken' }
     ],
     pickups: [{ x: 480, y: 420, type: 'shield' }],
-    fans: [{ x: 170, w: 130, on: 3.2, off: 3.6, phase: 0 }, { x: 660, w: 130, on: 3.2, off: 3.6, phase: 3.4 }],
+    fans: [{ x: 170, w: 130, on: 2.4, off: 4.2, phase: 0 }, { x: 660, w: 130, on: 2.4, off: 4.2, phase: 3.3 }],
     intro: 'Deck fans blow balls sky-high — small ones most of all.\nAmber lights mean a fan is spinning up.',
   },
   {
-    id: 'airship_2', name: 'Crosswinds', theme: 'airship', timeLimit: 90, targetScore: 11400,
+    id: 'airship_2', name: 'Crosswinds', theme: 'airship', timeLimit: 90, targetScore: 17000,
     balls: [
       { x: 190, y: 150, size: 3, type: 'electric', vx: -115 },
       { x: 770, y: 150, size: 3, type: 'lava', vx: 115 },
@@ -433,12 +433,12 @@ export const LEVELS = [
     ],
     destructibles: [{ x: 460, y: 448, w: 40, h: 40, contains: 'bomb' }],
     pickups: [{ x: 840, y: 420, type: 'freeze' }],
-    fans: [{ x: 415, w: 130, on: 2.8, off: 4.4, phase: 1 }],
+    fans: [{ x: 415, w: 130, on: 2.4, off: 4.6, phase: 1 }],
     wind: { strength: 200, gapMin: 6, gapMax: 9 },
     intro: 'High-altitude gusts AND a deck fan.\nThe fan clears smoke — use it.',
   },
   {
-    id: 'airship_3', name: 'Skyfish Run', theme: 'airship', timeLimit: 85, targetScore: 10200,
+    id: 'airship_3', name: 'Skyfish Run', theme: 'airship', timeLimit: 95, targetScore: 13600,
     // Both balls open heading away from the spawn — the giant hexagon needs
     // a full wall bounce before its sweep threatens the starting position.
     balls: [
@@ -458,27 +458,28 @@ export const LEVELS = [
     intro: 'Ball-fish patrol the sky lanes — they jam your cannon.\nThe giant hexagon won\'t wait. Start chipping.',
   },
   {
-    id: 'airship_4', name: 'Stormwall', theme: 'airship', timeLimit: 95, targetScore: 12000,
+    id: 'airship_4', name: 'Stormwall', theme: 'airship', timeLimit: 95, targetScore: 11000,
     balls: [
       { x: 190, y: 150, size: 3, type: 'electric', vx: -115 },
       { x: 770, y: 150, size: 3, type: 'armored', vx: 115 },
       { x: 480, y: 120, size: 3, type: 'explosive', vx: -115 },
-      { x: 330, y: 220, size: 2, type: 'hexagon', vx: -165 }
+      { x: 330, y: 220, size: 2, type: 'hexagon', vx: -165 },
+      { x: 640, y: 230, size: 3, type: 'normal', vx: 115 }
     ],
     platforms: [
       { x: 395, y: 310, w: 170, h: 16 }
     ],
     destructibles: [{ x: 460, y: 448, w: 40, h: 40, contains: 'machinegun' }],
     pickups: [{ x: 840, y: 420, type: 'freeze' }],
-    fans: [{ x: 150, w: 120, on: 3, off: 4, phase: 0 }, { x: 690, w: 120, on: 3, off: 4, phase: 3.5 }],
+    fans: [{ x: 150, w: 120, on: 2.4, off: 4.4, phase: 0 }, { x: 690, w: 120, on: 2.4, off: 4.4, phase: 3.4 }],
     creatures: [{ kind: 'bird', x: 480, y: 170, dir: -1 }],
-    wind: { strength: 180, gapMin: 7, gapMax: 10 },
+    wind: { strength: 220, gapMin: 5.5, gapMax: 8 },
     intro: 'The last gauntlet before the Commander.\nEverything you have learned, all at once.',
   },
 
   // ================= FINALE =================
   {
-    id: 'boss', name: 'Commander RIFT', theme: 'boss', timeLimit: 240, targetScore: 14000,
+    id: 'boss', name: 'Commander RIFT', theme: 'boss', timeLimit: 240, targetScore: 27000,
     balls: [],
     platforms: [
       { x: 80, y: 380, w: 130, h: 16 },

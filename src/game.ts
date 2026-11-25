@@ -149,6 +149,11 @@ export class Game {
   chainCascade: number;
   /** Bitmask of player numbers that contributed to the current window. */
   chainOwners: number;
+  /** Bumped whenever a run starts or is abandoned. Async platform callbacks
+   *  (rewarded ads, midgame ads) capture it and bail if it has moved on. */
+  runToken = 0;
+  /** Debug snapshot of the ball nearest the player at the last ball death. */
+  lastDeathInfo: Record<string, unknown> | null = null;
   /** Sky-flare clock for a volcano eruption (1 → 0). */
   eruptFlash: number;
   /** Seed the current stage's gameplay RNG was started from. */
@@ -157,6 +162,9 @@ export class Game {
   simT: number;
   /** Test hook: when true the rAF loop renders but does not step the sim. */
   manualStep: boolean;
+  /** Test hook: when set, every stage starts from this seed instead of a
+   *  fresh random one (the Daily still uses its date seed). */
+  forcedSeed: number | null;
   /** Boss Rush queue (boss-level indices remaining). When non-empty we cycle
    *  through and progress to victory when the queue empties. */
   bossRushQueue: number[];
@@ -310,6 +318,7 @@ export class Game {
     this.runSeed = 1;
     this.simT = 0;
     this.manualStep = false;
+    this.forcedSeed = null;
     this.bossRushQueue = [];
     this.bossRushCount = 0;
     this.panicGauge = 0;
@@ -381,6 +390,7 @@ export class Game {
   // ============================ LIFECYCLE ============================
   /** Reset per-run flags that should not survive across separate runs. */
   _resetRunFlags() {
+    this.runToken++;
     this.usedRewardedContinue = false;
     this.rewardedOffered = false;
     this.awaitingAd = false;
@@ -467,7 +477,7 @@ export class Game {
     this.preRunTotalXp = computeTotalXp(Storage.data);
     this.preRunStageBest = 0;
     this.preRunMaxCombo = Storage.data.lifetimeMaxCombo || 0;
-    this.seedRun(randomSeed());
+    this.seedRun(this.forcedSeed ?? randomSeed());
     this.resetStageState();
     this.clearArena();
     this.targetScore = 0;
@@ -577,7 +587,7 @@ export class Game {
     // player gets the same bounces; every other mode rolls a fresh seed.
     this.seedRun(this.mode === 'daily' && this.daily
       ? hash32('popshot-daily:' + this.daily.date + ':' + L.id)
-      : randomSeed());
+      : (this.forcedSeed ?? randomSeed()));
 
     // Apply daily modifier transformations as the level is built.
     const bigBubbles = this.modifier === 'big_bubbles';

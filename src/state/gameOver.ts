@@ -81,10 +81,16 @@ export function getGameOverLayout() {
 
 /** Trigger a rewarded ad. On success, restore one life and resume the run. */
 export function startRewardedContinue(game: Game) {
+  if (game.awaitingAd || !canRewardedContinue(game)) return;
   game.awaitingAd = true;
+  // The reward belongs to THIS game-over. If the player has left the screen
+  // by the time the ad resolves (menu, a fresh run), it is silently dropped
+  // rather than resurrecting a run that no longer exists.
+  const token = ++game.runToken;
   Sdk.requestRewardedAd().then(granted => {
     game.awaitingAd = false;
     if (!granted) return;
+    if (game.runToken !== token || game.state !== State.GAME_OVER || game.usedRewardedContinue) return;
     game.usedRewardedContinue = true;
     game.lives = 1;
     if (game.mode === 'panic') {
@@ -115,9 +121,10 @@ export function startRewardedContinue(game: Game) {
 }
 
 export function updateGameOver(game: Game) {
-  // Escape always returns to main menu — consume it first so it can't fall through.
-  if (consumePressed('Escape')) { game.state = State.MAIN_MENU; AudioSys.menu(); return; }
+  // While an ad is in flight nothing may change state underneath it.
   if (game.awaitingAd) return;
+  // Escape always returns to main menu — consume it first so it can't fall through.
+  if (consumePressed('Escape')) { game.runToken++; game.state = State.MAIN_MENU; AudioSys.menu(); return; }
 
   // Rewarded continue: a click on the continue button takes priority over the
   // "any input retries" fallback, so the player can't accidentally skip the offer.

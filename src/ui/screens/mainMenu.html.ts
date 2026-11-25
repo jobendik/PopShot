@@ -70,7 +70,7 @@ const SECONDARY: { key: string; label: string; target: string }[] = [
   { key: 'levels',   label: 'Levels',   target: State.LEVEL_SELECT },
   { key: 'modes',    label: 'Modes',    target: State.MODE_SELECT  },
   { key: 'hub',      label: 'Hub',      target: State.HUB          },
-  { key: 'controls', label: 'Controls', target: State.CONTROLS     },
+  { key: 'controls', label: 'How to Play', target: State.CONTROLS     },
   { key: 'credits',  label: 'Credits',  target: State.CREDITS      },
 ];
 

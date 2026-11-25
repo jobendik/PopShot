@@ -7,10 +7,10 @@ import { UI } from '../ui/domRoot';
 import type { Game } from '../game';
 
 const MODE_ITEMS = [
-  { title: 'TOUR',         desc: 'The campaign. 18 stages across 6 worlds + boss.' },
-  { title: 'SCORE ATTACK', desc: '3 lives, no continues. Beat your best.' },
-  { title: 'PANIC MODE',   desc: 'Endless waves with a Rainbow Gauge and Star Bubbles.' },
-  { title: 'BOSS RUSH',    desc: 'Defeat every boss in sequence. No retries.' },
+  { title: 'TOUR',         desc: 'The adventure: 27 stages, 6 worlds, 3 bosses.' },
+  { title: 'SCORE ATTACK', desc: '3 lives. The whole Tour. One score to beat.' },
+  { title: 'PANIC MODE',   desc: 'Endless waves through rotating zones. How far can you get?' },
+  { title: 'BOSS RUSH',    desc: 'All three bosses back to back, on one set of lives.' },
   { title: 'BACK',         desc: 'Return to main menu.' },
 ];
 

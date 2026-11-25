@@ -113,7 +113,10 @@ export class Volta extends Boss {
         // Storm wall: the arena lights up in bands, with one band left dark.
         const bands = 5;
         const bw = (WALL_R - WALL_L) / bands;
-        const safe = grandi(0, bands - 1);
+        // The dark lane is always the player's own band or a neighbour —
+        // reachable on foot inside the warning, never a coin-flip across the arena.
+        const pb = clamp(Math.floor((px - WALL_L) / bw), 0, bands - 1);
+        const safe = clamp(pb + grandi(-1, 1), 0, bands - 1);
         for (let i = 0; i < bands; i++) {
           if (i === safe) continue;
           this.strikeColumn(game, WALL_L + bw * (i + 0.5), bw - 26, 1.15, CEILING_Y, 0.4);

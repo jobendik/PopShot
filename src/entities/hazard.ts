@@ -49,8 +49,9 @@ export class Hazard {
       this.phase += dt * 2.8;
       this.active = Math.sin(this.phase) > -0.2;
     } else if (this.type === 'flame_vent') {
-      this.phase += dt * 3.4;
-      this.active = Math.sin(this.phase) > 0.15;
+      // ~2.6 s cycle: rest → pilot light (the telegraph) → flare.
+      this.phase += dt * 2.4;
+      this.active = Math.sin(this.phase) > 0.2;
     } else if (this.type === 'falling_rock') {
       this.vy += GRAVITY * 0.55 * dt;
       this.y += this.vy * dt;
@@ -150,8 +151,21 @@ export class Hazard {
         ctx.closePath();
         ctx.fill();
       } else {
-        ctx.fillStyle = 'rgba(255,84,0,0.35)';
+        // Pilot light: grows through the half-second before the flare, so the
+        // vent announces itself instead of just switching on.
+        const warm = clamp((Math.sin(this.phase) + 0.55) / 0.75, 0, 1);
+        ctx.fillStyle = `rgba(255,84,0,${(0.3 + warm * 0.5).toFixed(2)})`;
         ctx.fillRect(this.x + 6, this.y + this.h - 14, this.w - 12, 3);
+        if (warm > 0.05 && Math.cos(this.phase) > 0) {
+          const hgt = 6 + warm * 16 + Math.sin(performance.now() / 30) * 2;
+          ctx.fillStyle = '#ffd60a';
+          ctx.beginPath();
+          ctx.moveTo(this.x + this.w / 2 - 5, this.y + this.h - 10);
+          ctx.lineTo(this.x + this.w / 2, this.y + this.h - 10 - hgt);
+          ctx.lineTo(this.x + this.w / 2 + 5, this.y + this.h - 10);
+          ctx.closePath();
+          ctx.fill();
+        }
       }
     } else if (this.type === 'falling_rock') {
       // Landing-point telegraph: pulsing ring on the floor directly under the

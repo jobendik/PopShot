@@ -185,7 +185,10 @@ export class Rift extends Boss {
       AudioSys.sfx('boss/laser_charge', 0.8) || AudioSys.warning();
       const bands = 5;
       const bw = (WALL_R - WALL_L) / bands;
-      const safe = grandi(0, bands - 1);
+      // The dark lane is always the player's own band or a neighbour —
+      // reachable on foot inside the warning, never a coin-flip across the arena.
+      const pb = clamp(Math.floor((px - WALL_L) / bw), 0, bands - 1);
+      const safe = clamp(pb + grandi(-1, 1), 0, bands - 1);
       for (let i = 0; i < bands; i++) {
         if (i === safe) continue;
         this.strikeColumn(game, WALL_L + bw * (i + 0.5), bw - 24, this.phase === 3 ? 1.0 : 1.15, CEILING_Y, 0.4);

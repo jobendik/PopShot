@@ -22,9 +22,9 @@ import { Boss, circleTouchesRect, shotDamage, shotHitsCircle, type BossKind } fr
 
 interface Tier { r: number; hp: number; bounce: number; hs: number; }
 const TIERS: Tier[] = [
-  { r: 74, hp: 12, bounce: 600, hs: 80 },
-  { r: 52, hp: 7,  bounce: 560, hs: 112 },
-  { r: 36, hp: 4,  bounce: 520, hs: 150 },
+  { r: 74, hp: 12, bounce: 600, hs: 92 },
+  { r: 52, hp: 7,  bounce: 560, hs: 126 },
+  { r: 36, hp: 4,  bounce: 520, hs: 168 },
 ];
 /** Total HP still "inside" a body of this tier once it is broken open. */
 const BELOW = [14 + 16, 8, 0];

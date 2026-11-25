@@ -5,7 +5,7 @@ import { Storage } from './systems/storage';
 import { bindCanvasInput, keys, keysPressed } from './systems/input';
 import { Platform } from './systems/platform';
 import { emit, installErrorHandlers } from './systems/analytics';
-import { captureWelcomeBack, setUsername } from './systems/daily';
+import { captureWelcomeBack, pickDailyChallenge, setUsername } from './systems/daily';
 import { earnedTitles, markTitlesSeen } from './systems/titles';
 import { State } from './constants';
 import { UI } from './ui/domRoot';
@@ -153,4 +153,5 @@ if (debugHooks) {
   w.__Storage = Storage;
   w.__Platform = Platform;
   w.__AudioSys = AudioSys;
+  w.__pickDaily = pickDailyChallenge;
 }
