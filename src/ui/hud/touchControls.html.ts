@@ -23,6 +23,7 @@
 import { keys, keysPressed, isTouchDevice } from '../../systems/input';
 import { Haptics } from '../../systems/haptics';
 import { AudioSys } from '../../systems/audio';
+import { Storage } from '../../systems/storage';
 
 type BtnId = 'left' | 'right';
 
@@ -90,7 +91,7 @@ function onPointerDown(e: PointerEvent) {
   // Double-tap a side = dash that way. A quick second tap on the SAME zone
   // raises a one-frame synthetic key the player entity reads as a dash.
   const now = performance.now();
-  if (now - lastTap[btn] < DOUBLE_TAP_MS) {
+  if (Storage.data.mobileDoubleTapDash !== false && now - lastTap[btn] < DOUBLE_TAP_MS) {
     keysPressed[btn === 'left' ? 'DashLeft' : 'DashRight'] = true;
     lastTap[btn] = -1e9;
     Haptics.tap();

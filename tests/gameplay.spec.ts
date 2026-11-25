@@ -322,7 +322,7 @@ test('Panic mode survives 60 waves of zone rotation with a bounded arena', async
   expect(res.peak).toBeLessThan(70);
   expect(res.themes).toEqual(['airship', 'arctic', 'beach', 'boss', 'city', 'desert', 'volcano']);
   expect(res.particles).toBeLessThanOrEqual(340);
-  expect(res.texts).toBeLessThanOrEqual(28);
+  expect(res.texts).toBeLessThanOrEqual(40);            // capped at 28 per frame + that frame's new callouts
   expect(res.hazards).toBeLessThan(60);
   expect(realErrors(errors)).toEqual([]);
 });
@@ -363,4 +363,73 @@ test('the Daily Challenge replays identically from the same date', async ({ page
     return g.runSeed;
   });
   expect(other).not.toBe(a.seed);
+});
+
+test('Boss Rush chains all three bosses, restores a life per boss, and ends in victory', async ({ page }) => {
+  await boot(page);
+  const res = await page.evaluate(() => {
+    const g = (window as any).__game, keys = (window as any).__keys, kp = (window as any).__keysPressed;
+    g.forcedSeed = 11;
+    g.startBossRush(); g.introTimer = 0;
+    const order: string[] = [g.boss.kind];
+    const livesAtStart: number[] = [];
+    g.lives = 1;                                           // prove the +1 life between fights
+    let f = 0;
+    for (; f < 60 * 600; f++) {
+      const p = g.player;
+      if (g.state === 'playing' && p) {
+        p.invuln = 1;
+        let tx: number | null = null, best = 1e9;
+        for (const b of g.balls) { const d = Math.abs(b.x - p.x) + (b.type === 'explosive' && b.fuse > 0 ? 9999 : 0); if (d < best) { best = d; tx = b.x; } }
+        if (tx == null && g.boss) tx = g.boss.x;
+        keys.ArrowLeft = tx != null && tx < p.x - 5;
+        keys.ArrowRight = tx != null && tx > p.x + 5;
+        keys.Space = true;
+      } else { keys.Space = false; }
+      if (g.state === 'level_clear') {
+        keys.Space = false; kp.Enter = true; g.update(1 / 60);
+        if (g.state === 'playing') { order.push(g.boss.kind); livesAtStart.push(g.lives); g.introTimer = 0; }
+        continue;
+      }
+      g.update(1 / 60);
+      if (g.state === 'victory' || g.state === 'game_over') break;
+    }
+    keys.ArrowLeft = keys.ArrowRight = keys.Space = false;
+    g.forcedSeed = null;
+    const S = (window as any).__Storage.data;
+    return { order, livesAtStart, state: g.state, count: g.bossRushCount, best: S.bestBossRush, bestCount: S.bestBossRushCount, score: g.score };
+  });
+  expect(res.order).toEqual(['globo', 'volta', 'rift']);
+  expect(res.livesAtStart).toEqual([2, 3]);
+  expect(res.state).toBe('victory');
+  expect(res.count).toBe(3);
+  expect(res.bestCount).toBe(3);
+  expect(res.best).toBe(res.score);
+});
+
+test('Score Attack walks the Tour in order on one score and one set of lives', async ({ page }) => {
+  await boot(page);
+  const res = await page.evaluate(() => {
+    const g = (window as any).__game, kp = (window as any).__keysPressed;
+    g.startScoreAttack(); g.introTimer = 0;
+    const seen: number[] = [g.levelIndex];
+    const scores: number[] = [];
+    for (let n = 0; n < 3; n++) {
+      g.player.invuln = 999;
+      let guard = 0;
+      while (g.balls.length && guard++ < 400) { g._popBall(g.balls.find((b: any) => !b.dead), null); g.balls = g.balls.filter((b: any) => !b.dead); }
+      g.update(1 / 60);
+      scores.push(g.score);
+      kp.Enter = true; g.update(1 / 60);
+      g.introTimer = 0;
+      seen.push(g.levelIndex);
+    }
+    return { seen, scores, mode: g.mode, state: g.state, lives: g.lives };
+  });
+  expect(res.seen).toEqual([0, 1, 2, 3]);
+  expect(res.scores[1]).toBeGreaterThan(res.scores[0]);
+  expect(res.scores[2]).toBeGreaterThan(res.scores[1]);
+  expect(res.mode).toBe('score_attack');
+  expect(res.state).toBe('playing');
+  expect(res.lives).toBe(3);
 });

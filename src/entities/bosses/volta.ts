@@ -202,7 +202,6 @@ export class Volta extends Boss {
     ctx.save();
     ctx.translate(this.x + shake, this.y);
     ctx.lineJoin = 'round';
-    if (this.flash > 0) ctx.filter = 'brightness(1.8)';
 
     // Rail hanger up to the ceiling.
     ctx.strokeStyle = '#2b3440'; ctx.lineWidth = 8;
@@ -262,7 +261,16 @@ export class Volta extends Boss {
     if (down) { ctx.moveTo(-r * 0.4, -r * 0.5); ctx.lineTo(-r * 0.1, -r * 0.42); ctx.moveTo(r * 0.4, -r * 0.5); ctx.lineTo(r * 0.1, -r * 0.42); }
     else { ctx.moveTo(-r * 0.42, -r * 0.48); ctx.lineTo(-r * 0.08, -r * 0.36); ctx.moveTo(r * 0.42, -r * 0.48); ctx.lineTo(r * 0.08, -r * 0.36); }
     ctx.stroke();
-    ctx.filter = 'none';
+    // Hit flash: white veil over the chassis (no ctx.filter — it is a slow path).
+    if (this.flash > 0) {
+      ctx.globalAlpha = Math.min(0.6, this.flash / 0.16 * 0.6);
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.86, -r * 0.5); ctx.lineTo(r * 0.86, -r * 0.5);
+      ctx.lineTo(r, 0); ctx.lineTo(r * 0.7, r * 0.6); ctx.lineTo(-r * 0.7, r * 0.6); ctx.lineTo(-r, 0);
+      ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
 
     // ---- Shield: six orbiting hex plates. Gone while overloaded. ----
     if (this.dying < 0) {

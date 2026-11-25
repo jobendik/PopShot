@@ -58,6 +58,12 @@ export function addCharge(game: Game, amount: number) {
       pushText(game.floatingTexts, new FloatingText(p.x, p.y - 74, 'POPSHOT READY!', '#fff3b0', 20), 'popshot', 1.4).rise = 26;
       game.shockwaves.push(new Shockwave(p.x, p.y - 24, 90, '#fff3b0', 0.4));
     }
+    // The very first time, spell out what a full meter means.
+    if (!Storage.data.tips?.popshot) {
+      Storage.data.tips = { ...(Storage.data.tips || {}), popshot: true };
+      Storage.save();
+      banner(game, 'POPSHOT READY!', 'your next shot bursts a whole ball family', '#fff3b0', 34, 2.6);
+    }
   }
 }
 
@@ -316,9 +322,9 @@ export function creditPop(game: Game, ball: Ball, source: PopSource, childCount 
       game.flash = Math.max(game.flash, 0.08 + milestone * 0.03);
       game.shake = Math.max(game.shake, 3 + milestone * 1.5);
       game.hitPause = Math.max(game.hitPause, 0.05 + milestone * 0.02);
-      if (milestone >= 3) {
-        const medalTier = (['gold', 'plat', 'mythic', 'mythic'] as const)[milestone - 3];
-        FX.medal(label.replace('!', ''), c + ' chain', medalTier, '×' + chainMult(c).toFixed(1));
+      // Only the rare tiers earn a persistent callout; the banner covers the rest.
+      if (milestone >= 5) {
+        FX.medal(label.replace('!', ''), c + ' chain', milestone >= 6 ? 'mythic' : 'plat', '×' + chainMult(c).toFixed(1));
       }
       if (milestone >= 4) FX.chromAb();
       AudioSys.comboHit(Math.min(4, milestone));
@@ -360,7 +366,6 @@ export function creditPop(game: Game, ball: Ball, source: PopSource, childCount 
   if (newTitles.length > 0) {
     const t = newTitles[0];
     FX.medal(t.label, 'New title earned', 'mythic', 'TITLE');
-    FX.toast('info', 'TITLE UNLOCKED', t.label);
     AudioSys.sfx('combo/title_unlock', 0.9) || AudioSys.firstPop();
     markTitlesSeen(newTitles.map(n => n.id));
   }

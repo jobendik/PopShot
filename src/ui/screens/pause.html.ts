@@ -50,6 +50,10 @@ export function buildPause(game: Game): HTMLElement {
         <span>Vibration</span>
         <div class="pause__toggle-switch"></div>
       </div>
+      <div class="pause__toggle" data-role="dtdash">
+        <span>Double-tap to dash</span>
+        <div class="pause__toggle-switch"></div>
+      </div>
     </div>
 
     <div class="overlay-card__actions">
@@ -89,6 +93,11 @@ export function buildPause(game: Game): HTMLElement {
     card.querySelector<HTMLElement>('[data-role="haptics"]')!.addEventListener('click', () => {
       AudioSys.menu();
       Storage.data.mobileHaptics = !Storage.data.mobileHaptics;
+      Storage.save();
+    });
+    card.querySelector<HTMLElement>('[data-role="dtdash"]')!.addEventListener('click', () => {
+      AudioSys.menu();
+      Storage.data.mobileDoubleTapDash = !Storage.data.mobileDoubleTapDash;
       Storage.save();
     });
   }
@@ -135,13 +144,13 @@ export function syncPause(game: Game, root: HTMLElement) {
   if (controls && !controls.dataset.populated) {
     controls.dataset.populated = '1';
     controls.innerHTML = isTouchDevice
-      ? `<div>Tap the <strong>left half</strong> of the screen to move left, <strong>right half</strong> to move right.</div>
-         <div>Shots fire automatically.</div>
-         <div>Tap the pause icon (top-right) to pause / resume.</div>`
-      : `<div><strong>A / ←</strong> · <strong>D / →</strong>  Move</div>
-         <div><strong>Space / W / ↑</strong>  Shoot</div>
+      ? `<div>Hold the <strong>left</strong> or <strong>right</strong> side to move. Shots fire automatically.</div>
+         <div><strong>Double-tap</strong> a side to <strong>dash</strong> through danger.</div>
+         <div>Gold bar full? Your next shot is a <strong>PopShot</strong>.</div>`
+      : `<div><strong>A / ←</strong> · <strong>D / →</strong>  Move     <strong>Space</strong>  Shoot</div>
+         <div><strong>Shift / S / ↓</strong>  Dash — you can't be hurt mid-dash</div>
         <div><strong>P</strong> or <strong>Esc</strong>  Pause     <strong>R</strong>  Restart     <strong>M</strong>  Mute</div>
-        <div><strong>PS5</strong>  Left stick / D-pad move  •  Cross shoot  •  Circle / Options pause</div>`;
+        <div><strong>Gamepad</strong>  Stick / D-pad move  •  A / ✕ shoot  •  Bumpers dash</div>`;
   }
 
   const reduced = root.querySelector<HTMLElement>('[data-role="reduced"]');
@@ -152,5 +161,7 @@ export function syncPause(game: Game, root: HTMLElement) {
   if (isTouchDevice) {
     const hp = root.querySelector<HTMLElement>('[data-role="haptics"]');
     if (hp) hp.classList.toggle('is-on', !!Storage.data.mobileHaptics);
+    const dd = root.querySelector<HTMLElement>('[data-role="dtdash"]');
+    if (dd) dd.classList.toggle('is-on', Storage.data.mobileDoubleTapDash !== false);
   }
 }

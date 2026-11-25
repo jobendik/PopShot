@@ -185,14 +185,28 @@ export function syncHighScores(game: Game, root: HTMLElement) {
   const rows: Row[] = [
     { label: 'CrazyGames Leaderboard', value: Storage.data.leaderboardPanicSubmitted > 0 ? 'Panic ' + Storage.data.leaderboardPanicSubmitted.toLocaleString() : 'Panic Mode ready' },
     { label: 'Weekly · ' + weekly.label, value: weeklyValue },
+    { label: 'Best Score Attack', value: (Storage.data.bestScoreAttack || 0).toLocaleString() },
     { label: 'Best Panic Score', value: (Storage.data.bestPanicScore || 0).toLocaleString() },
     { label: 'Best Panic Wave', value: String(Storage.data.bestPanicWave || 0) },
+    { label: 'Best Boss Rush', value: (Storage.data.bestBossRush || 0).toLocaleString() + '  ·  ' + (Storage.data.bestBossRushCount || 0) + '/3 bosses' },
+    { label: 'Perfect Chains', value: String(Storage.data.perfectChains || 0) },
     ...LEVELS.map((L, i) => ({
     label: `${i + 1}. ${L.name}`,
     value: (tour[L.id] || 0).toLocaleString(),
     })),
   ];
-  root.querySelector<HTMLElement>('[data-role="rows"]')!.innerHTML = rowHtml(rows);
+  // Records set before the scoring overhaul are kept, clearly labelled, rather
+  // than mixed in with scores they cannot be compared to.
+  const lg = Storage.data.legacy;
+  if (lg && (lg.scoreAttack || lg.panicScore || lg.bossRush || lg.panicWave)) {
+    rows.push({ label: 'Classic · Score Attack', value: (lg.scoreAttack || 0).toLocaleString() });
+    rows.push({ label: 'Classic · Panic', value: (lg.panicScore || 0).toLocaleString() + '  ·  wave ' + (lg.panicWave || 0) });
+    rows.push({ label: 'Classic · Boss Rush', value: (lg.bossRush || 0).toLocaleString() });
+  }
+  const html = rowHtml(rows);
+  const el = root.querySelector<HTMLElement>('[data-role="rows"]')!;
+  // Only touch the DOM when something actually changed (this runs per frame).
+  if (el.dataset.sig !== html) { el.dataset.sig = html; el.innerHTML = html; }
 }
 
 export function buildProfile(game: Game): HTMLElement {

@@ -183,10 +183,7 @@ export function updatePlaying(game: Game, dt: number) {
       pushText(game.floatingTexts, new FloatingText(cx, cy + 8, '×' + n + '   +' + (game.chainScore + gained).toLocaleString(), '#fff', 15), 'multi2', 0.95).rise = 24;
       game.shockwaves.push(new Shockwave(game.chainCx, game.chainCy, 80 + n * 18, color, 0.4));
       AudioSys.multipop(n);
-      if (n >= 5) {
-        const tier = n <= 7 ? 'gold' : 'mythic';
-        FX.medal(label, n + ' balls at once', tier, '+' + gained);
-      }
+      if (n >= 8) FX.medal(label, n + ' balls at once', 'mythic', '+' + gained);
       if (n > (Storage.data.bestMultiPop || 0)) Storage.data.bestMultiPop = n;
       if (n >= 3) advanceMissions('multi_pop', 1);
     }

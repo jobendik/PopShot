@@ -311,7 +311,6 @@ export class Rift extends Boss {
     const shake = this.dying >= 0 ? rand(-4, 4) : this.overload > 0 ? Math.sin(t * 60) * 1.5 : 0;
     ctx.translate(this.x + shake, this.y);
     ctx.lineJoin = 'round';
-    if (this.flash > 0) ctx.filter = 'brightness(1.9)';
 
     // Phase aura — a pulsing menace ring that intensifies in later phases.
     if (this.phase >= 2) {
@@ -413,7 +412,14 @@ export class Rift extends Boss {
     ctx.fillStyle = 'rgba(255,255,255,0.9)';
     ctx.beginPath(); ctx.arc(-2.6, -6, 1.6, 0, Math.PI * 2); ctx.fill();
 
-    ctx.filter = 'none';
+    // Hit flash: white veil over hull + dome (no ctx.filter — slow path).
+    if (this.flash > 0) {
+      ctx.globalAlpha = Math.min(0.55, this.flash / 0.16 * 0.55);
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.ellipse(0, 8, r, r * 0.46, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(0, -4, r * 0.58, r * 0.46, 0, Math.PI, 0); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
 
     // ---- Shield (phase II) ----
     if (this.phase === 2 && this.dying < 0) {

@@ -273,7 +273,6 @@ export class Globo extends Boss {
     ctx.save();
     ctx.translate(b.x + shiver, b.y + r * (1 - sy) * sq);
     ctx.scale(sx, sy);
-    if (this.flash > 0 && b.hurt > 0.14) ctx.filter = 'brightness(1.7)';
 
     // Body — royal magenta, same glass-ball language as the regular roster.
     const g = ctx.createRadialGradient(-r * 0.4, -r * 0.45, r * 0.1, 0, 0, r);
@@ -351,7 +350,14 @@ export class Globo extends Boss {
       ctx.quadraticCurveTo(0, my + r * 0.06, -r * 0.36, my - r * 0.06);
       ctx.closePath(); ctx.fill(); ctx.stroke();
     }
-    ctx.filter = 'none';
+    // Hit flash: a white veil over the body. (Deliberately NOT ctx.filter —
+    // canvas filters force a slow path and cost whole frames on weak GPUs.)
+    if (this.flash > 0 && b.hurt > 0.14) {
+      ctx.globalAlpha = Math.min(0.6, this.flash / 0.16 * 0.6);
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
 
     // ---- Crown (king) / circlet (princes) — rides the squash with a lag ----
     if (b.tier < 2) {
