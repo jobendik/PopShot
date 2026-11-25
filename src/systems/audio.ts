@@ -70,17 +70,17 @@ const POP_SCALES: Record<string, number[]> = {
   boss:    [0, 1, 5, 6, 10],   // dissonant — danger
 };
 
-const WEAPON_SFX: Record<string, { id: string; variants?: boolean; vol: number }> = {
-  harpoon:    { id: 'weapon/harpoon_fire', variants: true, vol: 0.9 },
-  double:     { id: 'weapon/double_fire', variants: true, vol: 0.85 },
-  triple:     { id: 'weapon/triple_fire', variants: true, vol: 0.85 },
+const WEAPON_SFX: Record<string, { id: string; variants?: number; vol: number }> = {
+  harpoon:    { id: 'weapon/harpoon_fire', variants: 3, vol: 0.9 },
+  double:     { id: 'weapon/double_fire', variants: 2, vol: 0.85 },
+  triple:     { id: 'weapon/triple_fire', variants: 2, vol: 0.85 },
   powerwire:  { id: 'weapon/grapple_fire', vol: 0.85 },
-  diagonal:   { id: 'weapon/diagonal_fire', variants: true, vol: 0.85 },
+  diagonal:   { id: 'weapon/diagonal_fire', variants: 2, vol: 0.85 },
   machinegun: { id: 'weapon/machinegun_fire', vol: 0.5 },
   laser:      { id: 'weapon/laser_fire', vol: 0.9 },
   flame:      { id: 'weapon/flame_start', vol: 0.5 },
   shotgun:    { id: 'weapon/shotgun_fire', vol: 0.95 },
-  shuriken:   { id: 'weapon/shuriken_fire', variants: true, vol: 0.85 },
+  shuriken:   { id: 'weapon/shuriken_fire', variants: 3, vol: 0.85 },
   bomb:       { id: 'weapon/bomb_launch', vol: 0.9 },
 };
 
@@ -277,18 +277,19 @@ export const AudioSys = {
   /** Round-robin variant pool: tries `${prefix}_01..03` and plays whichever is
    *  loaded next in rotation. Avoids the mechanical sameness of replaying one
    *  file during rapid clears. */
-  _playVariant(prefix: string, vol = 1): boolean {
+  _playVariant(prefix: string, vol = 1, count = 3): boolean {
     if (this.muted || this.cgMuted || !this.ctx) return false;
     const c = _variantCounters.get(prefix) ?? 0;
-    for (let i = 0; i < 3; i++) {
-      const idx = ((c + i) % 3) + 1;
+    for (let i = 0; i < count; i++) {
+      const idx = ((c + i) % count) + 1;
       const id = `${prefix}_${String(idx).padStart(2, '0')}`;
       if (_buffers.has(id)) {
         _variantCounters.set(prefix, c + 1);
         return this._playId(id, vol);
       }
     }
-    for (let i = 1; i <= 3; i++) _loadOne(this.ctx, `${prefix}_${String(i).padStart(2, '0')}`);
+    // Only ever request variants that exist — a missing file is a console 404.
+    for (let i = 1; i <= count; i++) _loadOne(this.ctx, `${prefix}_${String(i).padStart(2, '0')}`);
     return false;
   },
 
@@ -389,7 +390,7 @@ export const AudioSys = {
 
   weaponFire(weapon: string) {
     const w = WEAPON_SFX[weapon] || WEAPON_SFX.harpoon;
-    const ok = w.variants ? this._playVariant(w.id, w.vol) : this.sfx(w.id, w.vol, 35);
+    const ok = w.variants ? this._playVariant(w.id, w.vol, w.variants) : this.sfx(w.id, w.vol, 35);
     if (ok) return;
     // Procedural stand-ins, one voice per weapon so they stay distinguishable
     // even before (or without) the samples.
