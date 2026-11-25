@@ -1,10 +1,10 @@
-import { GROUND_Y, GRAVITY, type PickupType } from '../constants';
+import { GROUND_Y, GRAVITY, WEAPON_LABEL, type PickupType, type WeaponType } from '../constants';
 import { AudioSys } from '../systems/audio';
 import { advanceMissions } from '../systems/retention';
 import { roundRect } from '../rendering/canvas';
 import { INK, isLight, shade } from '../rendering/theme';
 import { clamp } from '../utils';
-import { FloatingText, Shockwave } from './particle';
+import { FloatingText, Shockwave, pushText } from './particle';
 import { Ball } from './ball';
 import type { Player } from './player';
 import type { Game } from '../game';
@@ -38,6 +38,11 @@ export const PICKUP_INFO: Record<PickupType, { color: string }> = {
   magnet:     { color: '#f72585' },
   combo:      { color: '#ff9f1c' },
   dynamite:   { color: '#ef233c' },
+};
+
+const PICKUP_LABEL: Partial<Record<PickupType, string>> = {
+  shield: 'SHIELD', score: 'GEM +2000', life: '1-UP', time: '+10 SECONDS', slowtime: 'SLOW MOTION',
+  freeze: 'FREEZE', clearsmoke: 'SMOKE CLEARED', magnet: 'MAGNET', combo: 'SCORE ×1.5', dynamite: 'DYNAMITE!',
 };
 
 export class Pickup {
@@ -87,18 +92,19 @@ export class Pickup {
 
   apply(player: Player, game: Game) {
     const t = this.type;
-    AudioSys.pickup();
+    AudioSys.pickupFor(t);
     advanceMissions('pickup', 1);
-    game.floatingTexts.push(new FloatingText(this.x, this.y - 20, '+' + t.toUpperCase(), '#ffd60a', 16));
+    const label = WEAPON_LABEL[t as WeaponType] || PICKUP_LABEL[t] || t.toUpperCase();
+    pushText(game.floatingTexts, new FloatingText(this.x, this.y - 26, label, '#ffd60a', 16), 'pickup' + player.playerNum, 1.0);
     if (t === 'shield') player.shield = true;
     else if (t === 'life') game.lives = Math.min(game.lives + 1, 9);
-    else if (t === 'score') { game.addScore(2000); game.floatingTexts.push(new FloatingText(this.x, this.y - 40, '+2000', '#ffd60a')); }
+    else if (t === 'score') { game.addScore(2000); }
     else if (t === 'time') { game.timer += 10; }
     else if (t === 'slowtime') { game.slowTime = 5; }
     else if (t === 'freeze') { game.freezeTime = 3.5; }
-    else if (t === 'clearsmoke') { game.smokeClouds.length = 0; game.floatingTexts.push(new FloatingText(this.x, this.y - 42, 'CLEAR!', '#cfd6df', 18)); }
+    else if (t === 'clearsmoke') { game.smokeClouds.length = 0; }
     else if (t === 'magnet') { game.magnetTime = 8; }
-    else if (t === 'combo') { game.comboBoostTime = 8; game.comboDecay = Math.max(game.comboDecay, 4); }
+    else if (t === 'combo') { game.comboBoostTime = 8; if (game.combo > 0) game.comboDecay = game.comboWindow; }
     else if (t === 'dynamite') {
       // Classic Pang Dynamite: every active ball is instantly reduced to its
       // smallest size. High risk — a crowded screen becomes a swarm of fast
@@ -112,12 +118,13 @@ export class Pickup {
         if (b.size === 0) {
           survivors.push(b);
         } else {
-          survivors.push(new Ball(b.x, b.y - 10, 0, b.type, b.vx, -180));
+          const tiny = new Ball(b.x, b.y - 10, 0, b.type === 'explosive' ? 'normal' : b.type, b.vx, -180);
+          tiny.bornT = 0.16;
+          survivors.push(tiny);
         }
       }
       game.balls = survivors;
       game.shockwaves.push(new Shockwave(this.x, this.y, 240, '#ff5400', 0.5));
-      game.floatingTexts.push(new FloatingText(this.x, this.y - 44, 'DYNAMITE!', '#ff5400', 22));
       AudioSys.explode();
     }
     else { player.setWeapon(t); }

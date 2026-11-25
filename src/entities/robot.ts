@@ -58,6 +58,10 @@ export interface RobotPose {
   dist?: number;     // px        accumulated travel -> wheel spin + tread scroll
   fireT?: number;    // seconds   time since fire began, or <0 for "at rest"
   cheerT?: number;   // seconds   time since a successful pop, or <0 for none
+  lookX?: number;    // -1..1     eye tracks a point of interest (nearest threat)
+  lookY?: number;    // -1..1
+  fear?: number;     // 0..1      wide eye + pinprick iris when danger is close
+  alpha?: number;    // 0..1      overall opacity (afterimages, respawn pulse)
   pal?: RobotPalette;
   scale?: number;    // default 1
 }
@@ -245,6 +249,8 @@ function scarfTails(ctx: CanvasRenderingContext2D, kx: number, ky: number, pal: 
 export function drawBot(ctx: CanvasRenderingContext2D, x: number, groundY: number, pose: RobotPose): { x: number; y: number } {
   const pal = withDefaults(pose.pal ?? ROBOT_P2_PALETTE);
   const t = pose.t || 0, S = pose.scale || 1;
+  const A = pose.alpha ?? 1;
+  ctx.globalAlpha = A;
   const facing = pose.facing || 1, vx = pose.vx || 0, dist = pose.dist || 0;
   const env = fireEnv(pose.fireT);
   const speed = Math.abs(vx);
@@ -258,6 +264,14 @@ export function drawBot(ctx: CanvasRenderingContext2D, x: number, groundY: numbe
   let look = Math.sin(t * 0.8) * 0.55, lookY = Math.sin(t * 0.6 + 1) * 0.16;
   if (speed > 10) look = clamp(Math.sign(vx) * 0.72, -0.85, 0.85);
   let openV = 1, squint = 0, smile = 0, iris = 1, browTilt = 0;
+  // Threat awareness: the eye follows the nearest ball, and widens with a
+  // shrunken iris as that ball closes in. Firing and cheering still override.
+  if (pose.lookX != null) {
+    look = lerp(look, clamp(pose.lookX, -0.85, 0.85), 0.85);
+    lookY = lerp(lookY, clamp(pose.lookY || 0, -0.9, 0.5), 0.85);
+  }
+  const fear = clamp(pose.fear || 0, 0, 1);
+  if (fear > 0) { iris = lerp(iris, 0.58, fear); browTilt = lerp(browTilt, 0.28, fear); }
   if (env.charge > 0) { const c = env.charge;
     squint = c * 0.55; iris = lerp(1, 0.62, c); browTilt = -0.30 * c; openV = lerp(1, 0.8, c);
     look = lerp(look, 0, clamp((pose.fireT || 0) / 0.09, 0, 1)); lookY = lerp(lookY, -0.18, c); }
@@ -288,8 +302,8 @@ export function drawBot(ctx: CanvasRenderingContext2D, x: number, groundY: numbe
   if (speed > 4) {
     const dir = Math.sign(vx) || facing; ctx.fillStyle = 'rgba(245,235,210,.5)';
     for (let i = 0; i < 4; i++) { const p = ((t * 4 + i * 0.37) % 1), r = 2 + p * 5, dx = -dir * (sep / 2 + R + p * 22), dy = -2 - p * 8 * Math.sin(p * 3);
-      ctx.globalAlpha = (1 - p) * 0.5; circle(ctx, dx, dy, r); ctx.fill(); }
-    ctx.globalAlpha = 1;
+      ctx.globalAlpha = (1 - p) * 0.5 * A; circle(ctx, dx, dy, r); ctx.fill(); }
+    ctx.globalAlpha = A;
   }
 
   /* ============ TREAD UNIT (wide flat track) ============ */
@@ -360,7 +374,7 @@ export function drawBot(ctx: CanvasRenderingContext2D, x: number, groundY: numbe
   const cy0 = hy + hh - 8;
   const cg = ctx.createRadialGradient(0, cy0, 0, 0, cy0, 8 + coreBright * 4);
   cg.addColorStop(0, pal.core); cg.addColorStop(.4, pal.core); cg.addColorStop(1, 'rgba(70,224,255,0)');
-  ctx.globalAlpha = 0.3 + coreBright * 0.5; ctx.fillStyle = cg; circle(ctx, 0, cy0, 8 + coreBright * 4); ctx.fill(); ctx.globalAlpha = 1;
+  ctx.globalAlpha = (0.3 + coreBright * 0.5) * A; ctx.fillStyle = cg; circle(ctx, 0, cy0, 8 + coreBright * 4); ctx.fill(); ctx.globalAlpha = A;
   ctx.fillStyle = pal.core; ctx.strokeStyle = INK; ctx.lineWidth = 2; circle(ctx, 0, cy0, 3); ctx.fill(); ctx.stroke();
   ctx.fillStyle = 'rgba(255,255,255,.9)'; circle(ctx, -1, cy0 - 1, 1); ctx.fill();
 

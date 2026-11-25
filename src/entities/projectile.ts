@@ -1,4 +1,5 @@
-import { CEILING_Y, WALL_L, WALL_R } from '../constants';
+import { CEILING_Y, GROUND_Y, WALL_L, WALL_R } from '../constants';
+import { AudioSys } from '../systems/audio';
 import { clamp, collideCircleRect, rand, sweepHitsRect } from '../utils';
 import { roundRect } from '../rendering/canvas';
 import { INK, PAL } from '../rendering/theme';
@@ -11,6 +12,7 @@ import type { Game } from '../game';
  *  keeps fast bullets/pellets from tunnelling through a thin platform when a
  *  single physics step covers more distance than the platform is thick. */
 function hitsPlatformRect(game: Game, x: number, prevY: number, y: number, w: number, h: number) {
+  for (const b of game.bumpers) if (b.blocksColumn(x, prevY, y)) return true;
   for (const p of game.platforms) {
     if (!p.blocksShots) continue;
     const overlapsX = x + w / 2 >= p.x && x - w / 2 <= p.x + p.w;
@@ -23,6 +25,7 @@ function hitsPlatformRect(game: Game, x: number, prevY: number, y: number, w: nu
 /** True if a circular projectile, swept from its previous position
  *  (prevX, prevY) to its current one, overlaps any solid platform. */
 function hitsPlatformCircle(game: Game, prevX: number, prevY: number, x: number, y: number, r: number) {
+  for (const b of game.bumpers) if (b.blocksCircle(x, y, r)) return true;
   for (const p of game.platforms) {
     if (!p.blocksShots) continue;
     if (collideCircleRect(x, y, r, p.x, p.y, p.w, p.h)) return true;
@@ -71,8 +74,11 @@ function drawSpearhead(ctx: CanvasRenderingContext2D, x: number, tipY: number, a
 //              and persists until struck by a ball (a passive defensive trap).
 // 'diagonal' — Sheila-style 45-degree harpoon. Behaves like a linear projectile,
 //              not an anchored wire, so it can hit balls without standing under them.
+// 'popshot'  — the meter super. A fat piercing lance that ignores platforms
+//              and marks every ball it touches to cascade (burst all the way
+//              down its family tree).
 export type ProjectileType = 'harpoon' | 'bullet' | 'pellet' | 'laser' | 'flame'
-  | 'shuriken' | 'bomb' | 'grapple' | 'diagonal';
+  | 'shuriken' | 'bomb' | 'grapple' | 'diagonal' | 'popshot';
 
 export class Projectile {
   x: number;
@@ -82,6 +88,10 @@ export class Projectile {
   dead: boolean;
   didHit: boolean;
   hitBalls: Set<Ball>;
+  /** Creatures this (piercing) shot already struck — one hit each. */
+  hitCreatures: Set<object>;
+  /** A piercing shot damages a boss once, not once per frame of overlap. */
+  hitBoss: boolean;
   startY: number;
   tipY: number;
   speed: number;
@@ -105,16 +115,21 @@ export class Projectile {
    *  shots from a single weapon and render the cable along the actual path. */
   dirX: number;
   dirY: number;
+  /** Power Wire: pops left before an anchored wire snaps. */
+  charges: number;
   constructor(x, y, type, owner, dirX = 0, dirY = -1) {
     this.x = x; this.y = y; this.type = type; this.owner = owner;
     this.dead = false;
     this.didHit = false;
     this.hitBalls = new Set();  // for piercing weapons
+    this.hitCreatures = new Set();
+    this.hitBoss = false;
     this.spin = 0;
     this.bounces = 0;
     this.explosionRadius = 0;
     this.anchored = false;
     this.anchorLife = 0;
+    this.charges = 1;
     this.dirX = dirX;
     this.dirY = dirY;
 
@@ -123,6 +138,12 @@ export class Projectile {
       this.tipY = y;
       this.speed = 1150;
       this.w = 6;
+    } else if (type === 'popshot') {
+      this.startY = y;
+      this.tipY = y;
+      this.speed = 2300;
+      this.w = 34;
+      this.life = 0.16;        // afterglow once the lance reaches the ceiling
     } else if (type === 'bullet') {
       this.vx = 0; this.vy = -900; this.w = 5; this.h = 12;
     } else if (type === 'pellet') {
@@ -130,21 +151,25 @@ export class Projectile {
     } else if (type === 'laser') {
       this.tipY = CEILING_Y;
       this.startY = y;
-      this.w = 16;
-      this.life = 0.2;
+      this.w = 18;
+      this.life = 0.3;           // a sustained burn, not a flash
+      // The rail is the one standard weapon that ignores cover: it burns
+      // straight through platforms and bumpers to the ceiling.
     } else if (type === 'flame') {
       this.vy = -380 - rand(0, 60);
       this.vx = rand(-30, 30);
       this.life = 0.4;
       this.r = 14;
     } else if (type === 'shuriken') {
-      this.vx = owner.facing * 85;
-      this.vy = -760;
+      // Ricochet Star: leaves at a shallow angle and keeps bouncing — the
+      // longer it survives the more of the arena it sweeps.
+      this.vx = owner.facing * 300;
+      this.vy = -640;
       this.w = 18;
       this.h = 18;
       this.r = 10;
-      this.life = 2.8;
-      this.bounces = 1;
+      this.life = 3.4;
+      this.bounces = 5;
     } else if (type === 'bomb') {
       this.vx = owner.facing * 45;
       this.vy = -620;
@@ -159,6 +184,7 @@ export class Projectile {
       this.speed = 1050;
       this.w = 6;
       this.anchorLife = 14;             // hard cap: 14s anchored before fading
+      this.charges = 3;                 // an anchored wire survives three pops
     } else if (this.type === 'diagonal') {
       // Linear travelling shot along (dirX, dirY). Diagonal harpoons are short
       // bolts rather than ceiling-anchored cables.
@@ -167,6 +193,7 @@ export class Projectile {
       this.speed = 980;
       this.vx = dirX * this.speed;
       this.vy = dirY * this.speed;
+      this.bounces = 1;
     }
   }
 
@@ -184,6 +211,14 @@ export class Projectile {
           this.dead = true;
           break;
         }
+      }
+      for (const b of game.bumpers) if (b.blocksColumn(this.x, prevTipY, this.tipY)) { this.dead = true; break; }
+    } else if (this.type === 'popshot') {
+      if (this.tipY > CEILING_Y) {
+        this.tipY = Math.max(CEILING_Y, this.tipY - this.speed * dt);
+      } else {
+        this.life -= dt;
+        if (this.life <= 0) this.dead = true;
       }
     } else if (this.type === 'bullet' || this.type === 'pellet') {
       const prevY = this.y;
@@ -209,17 +244,26 @@ export class Projectile {
       this.x += this.vx * dt;
       this.y += this.vy * dt;
       this.spin += dt * 18;
-      if ((this.x < WALL_L || this.x > WALL_R) && this.bounces > 0) {
-        this.x = clamp(this.x, WALL_L, WALL_R);
+      if ((this.x < WALL_L + this.r || this.x > WALL_R - this.r) && this.bounces > 0) {
+        this.x = clamp(this.x, WALL_L + this.r, WALL_R - this.r);
         this.vx *= -1;
         this.bounces--;
+        AudioSys.sfx('weapon/shuriken_bounce', 0.5);
       }
-      if (this.y <= CEILING_Y && this.bounces > 0) {
-        this.y = CEILING_Y;
-        this.vy = Math.abs(this.vy) * 0.75;
+      if (this.y <= CEILING_Y + this.r && this.bounces > 0) {
+        this.y = CEILING_Y + this.r;
+        this.vy = Math.abs(this.vy);
         this.bounces--;
+        AudioSys.sfx('weapon/shuriken_bounce', 0.5);
       }
-      if (this.life <= 0 || this.y > game.canvas.height || this.y < CEILING_Y - 30 || this.x < WALL_L - 30 || this.x > WALL_R + 30) this.dead = true;
+      // The floor is a bounce surface too — that is what makes it a ricochet.
+      if (this.y >= GROUND_Y - this.r && this.vy > 0 && this.bounces > 0) {
+        this.y = GROUND_Y - this.r;
+        this.vy = -Math.abs(this.vy);
+        this.bounces--;
+        AudioSys.sfx('weapon/shuriken_bounce', 0.5);
+      }
+      if (this.life <= 0 || this.y > GROUND_Y + 20 || this.y < CEILING_Y - 30 || this.x < WALL_L - 30 || this.x > WALL_R + 30) this.dead = true;
       else if (hitsPlatformCircle(game, prevX, prevY, this.x, this.y, this.r)) {
         // Shurikens bounce off walls/ceiling — bounce off solid platforms too
         // (from below) instead of passing straight through them.
@@ -236,9 +280,10 @@ export class Projectile {
       this.x += this.vx * dt;
       this.y += this.vy * dt;
       this.vy += 520 * dt;
-      if (this.y <= CEILING_Y || this.life <= 0 || hitsPlatformCircle(game, prevX, prevY, this.x, this.y, this.r)) {
+      if (this.y <= CEILING_Y || this.life <= 0 || this.y >= GROUND_Y - this.r
+          || hitsPlatformCircle(game, prevX, prevY, this.x, this.y, this.r)) {
         game.explodeProjectile(this, this.x, this.y);
-      } else if (this.y > game.canvas.height) this.dead = true;
+      }
     } else if (this.type === 'grapple') {
       if (!this.anchored) {
         const prevTipY = this.tipY;
@@ -255,6 +300,10 @@ export class Projectile {
             break;
           }
         }
+        for (const b of game.bumpers) {
+          if (b.blocksColumn(this.x, prevTipY, this.tipY)) { this.tipY = b.y + b.r; this.anchored = true; break; }
+        }
+        if (this.anchored) AudioSys.sfx('weapon/grapple_anchor', 0.7);
       } else {
         // Persistence countdown while anchored. Fades visually in draw().
         this.anchorLife -= dt;
@@ -266,7 +315,13 @@ export class Projectile {
       this.y += this.vy * dt;
       // Light gravity so the bolt arcs slightly — sells the "thrown" feel.
       this.vy += 220 * dt;
-      if (this.y < CEILING_Y || this.x < WALL_L || this.x > WALL_R || this.y > game.canvas.height) {
+      if ((this.x < WALL_L + 4 || this.x > WALL_R - 4) && this.bounces > 0) {
+        // One wall bounce: the pair crosses back over the arena.
+        this.x = clamp(this.x, WALL_L + 4, WALL_R - 4);
+        this.vx *= -1;
+        this.bounces--;
+      }
+      if (this.y < CEILING_Y || this.x < WALL_L || this.x > WALL_R || this.y > GROUND_Y + 20) {
         this.dead = true;
       } else if (hitsPlatformCircle(game, prevX, prevY, this.x, this.y, 8)) {
         this.dead = true;
@@ -286,7 +341,18 @@ export class Projectile {
       if (ball.y - ball.r > this.startY) return false;
       return true;
     }
+    if (this.type === 'popshot') {
+      if (ball.x + ball.r < this.x - this.w/2) return false;
+      if (ball.x - ball.r > this.x + this.w/2) return false;
+      if (ball.y + ball.r < this.tipY) return false;
+      if (ball.y - ball.r > this.startY) return false;
+      return true;
+    }
     if (this.type === 'laser') {
+      // The rail only burns what was already in the column when it fired —
+      // newborn children are spared, so it rewards lining targets up rather
+      // than vaporising one family top to bottom.
+      if (ball.bornT > 0) return false;
       if (ball.x + ball.r < this.x - this.w/2) return false;
       if (ball.x - ball.r > this.x + this.w/2) return false;
       if (ball.y + ball.r < this.tipY) return false;
@@ -323,10 +389,35 @@ export class Projectile {
   /** Most projectiles consume themselves on hit; laser/flame pierce.
    *  Grapples are consumed on hit too (the wire breaks), matching arcade Pang. */
   consumeOnHit() {
-    return !(this.type === 'laser' || this.type === 'flame' || this.type === 'shuriken');
+    // An anchored Power Wire is a tripwire: it survives until its charges run out.
+    if (this.type === 'grapple' && this.anchored) return --this.charges <= 0;
+    return !(this.type === 'laser' || this.type === 'flame' || this.type === 'shuriken' || this.type === 'popshot');
   }
 
   draw(ctx) {
+    if (this.type === 'popshot') {
+      // A lance of light: wide soft glow, gold body, white-hot core, and a
+      // blunt glowing head. Fades out after it reaches the ceiling.
+      const a = this.tipY > CEILING_Y ? 1 : clamp(this.life / 0.16, 0, 1);
+      const h = this.startY - this.tipY;
+      ctx.save();
+      ctx.globalAlpha = a * 0.3;
+      ctx.fillStyle = '#ffd60a';
+      ctx.fillRect(this.x - this.w * 0.9, this.tipY, this.w * 1.8, h);
+      ctx.globalAlpha = a * 0.9;
+      const g = ctx.createLinearGradient(this.x - this.w / 2, 0, this.x + this.w / 2, 0);
+      g.addColorStop(0, 'rgba(255,214,10,0)');
+      g.addColorStop(0.3, '#ffd60a');
+      g.addColorStop(0.5, '#ffffff');
+      g.addColorStop(0.7, '#ffd60a');
+      g.addColorStop(1, 'rgba(255,214,10,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(this.x - this.w / 2, this.tipY, this.w, h);
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(this.x, this.tipY, this.w * 0.42 * a, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      return;
+    }
     if (this.type === 'harpoon') {
       // Wire — an ink-edged cable with a warm metallic core (not a bare line),
       // capped by the shared barbed steel spearhead.
@@ -366,7 +457,7 @@ export class Projectile {
       ctx.lineWidth = this.type === 'bullet' ? 1.4 : 1.2;
       roundRect(ctx, this.x - this.w / 2, this.y, this.w, this.h, 2, true, true);
     } else if (this.type === 'laser') {
-      const a = clamp(this.life / 0.2, 0, 1);
+      const a = clamp(this.life / 0.12, 0, 1);
       ctx.save();
       ctx.globalAlpha = a;
       // Outer glow → magenta beam → hot white core.
@@ -441,6 +532,12 @@ export class Projectile {
         ctx.strokeStyle = INK;
         ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(this.x, this.tipY, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        // One bead per remaining charge, strung along the wire.
+        ctx.fillStyle = '#fff';
+        for (let i = 0; i < this.charges; i++) {
+          const by = this.tipY + (this.startY - this.tipY) * (0.3 + i * 0.2);
+          ctx.beginPath(); ctx.arc(this.x, by, 3.2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        }
         const pulse = 0.5 + Math.abs(Math.sin(performance.now() / 220)) * 0.5;
         ctx.globalAlpha = fade * 0.45 * pulse;
         ctx.strokeStyle = PAL.cyan;

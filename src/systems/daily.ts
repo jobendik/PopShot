@@ -1,5 +1,6 @@
 import { DAILY_MODIFIERS, type DailyModifierId } from '../constants';
-import { LEVELS } from '../data/levels';
+import { STAGE_INDICES } from '../data/levels';
+import { hash32 } from './rng';
 import { Platform as Sdk } from './platform';
 import { Storage, type MedalTier } from './storage';
 
@@ -18,15 +19,11 @@ export function yesterdayUTC(reference: Date = new Date()): string {
   return todayUTC(d);
 }
 
-/** Deterministic 32-bit hash from a string. FNV-1a. */
-function hash32(s: string): number {
-  let h = 0x811c9dc5;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return h >>> 0;
-}
+/** Bump when the stage pool or modifier list changes in a way that would
+ *  alter which challenge a given date maps to. It is mixed into the hash, so
+ *  everyone on the same build gets the same daily, and a new build simply
+ *  starts a fresh sequence instead of silently reshuffling mid-day. */
+export const DAILY_VERSION = 3;
 
 export interface DailyPick {
   date: string;
@@ -38,10 +35,12 @@ export interface DailyPick {
 
 /** Pick today's challenge: a non-boss level + one modifier, derived from the date. */
 export function pickDailyChallenge(date: string = todayUTC()): DailyPick {
-  // Exclude the boss level from the daily pool — it's a different game shape.
-  const playableCount = LEVELS.filter(l => !l.boss).length;
-  const levelIndex = hash32(date + ':level') % playableCount;
-  const modifier = DAILY_MODIFIERS[hash32(date + ':modifier') % DAILY_MODIFIERS.length];
+  // Boss stages are excluded from the daily pool — a different game shape.
+  // The pick indexes the list of non-boss stages, so it stays correct no
+  // matter where boss stages sit in the Tour order.
+  const key = 'v' + DAILY_VERSION + ':' + date;
+  const levelIndex = STAGE_INDICES[hash32(key + ':level') % STAGE_INDICES.length];
+  const modifier = DAILY_MODIFIERS[hash32(key + ':modifier') % DAILY_MODIFIERS.length];
   return {
     date,
     levelIndex,
@@ -100,9 +99,10 @@ export function welcomeBackMessage(): { title: string; subtitle: string } | null
     const streak = liveStreak();
     return {
       title: 'Welcome back!',
+      // No loss-framing: the streak is mentioned as a fact, not a threat.
       subtitle: streak > 0
-        ? `Your ${streak}-day streak is on the line — play today's challenge to keep it.`
-        : "Today's challenge is waiting.",
+        ? `Day ${streak + 1} of your daily run is ready whenever you are.`
+        : "Today's challenge is ready.",
     };
   }
   if (days < 7) return { title: 'Welcome back!', subtitle: `It's been ${days} days. A new daily challenge is waiting.` };

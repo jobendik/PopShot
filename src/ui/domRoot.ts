@@ -30,7 +30,7 @@ import { buildHub, syncHub } from './screens/hub.html';
 import { buildDailyIntro, syncDailyIntro, buildDailyResult, syncDailyResult } from './screens/daily.html';
 import { buildPause, syncPause } from './screens/pause.html';
 import { buildGameOver, syncGameOver } from './screens/gameOver.html';
-import { buildLevelClear, syncLevelClear, buildBossDefeated, buildVictory, syncVictory } from './screens/levelClear.html';
+import { buildLevelClear, syncLevelClear, buildBossDefeated, syncBossDefeated, buildVictory, syncVictory } from './screens/levelClear.html';
 import { buildHUD, syncHUD } from './hud/hud.html';
 import { buildTouchControls } from './hud/touchControls.html';
 import { buildOnboardingOverlay, tickOnboardingOverlay } from './overlay/onboarding.html';
@@ -80,7 +80,7 @@ class UIRoot {
     this.register(State.PAUSED,       buildPause(game),       syncPause);
     this.register(State.GAME_OVER,    buildGameOver(game),    syncGameOver);
     this.register(State.LEVEL_CLEAR,  buildLevelClear(game),  syncLevelClear);
-    this.register(State.BOSS_DEFEATED,buildBossDefeated(game));
+    this.register(State.BOSS_DEFEATED,buildBossDefeated(game), syncBossDefeated);
     this.register(State.VICTORY,      buildVictory(game),     syncVictory);
 
     // HUD + touch controls — always mounted, manage their own visibility.
@@ -107,6 +107,13 @@ class UIRoot {
 
   syncFrame(game: Game) {
     if (!this.container) return;
+
+    // World ambience follows the arena theme while a stage is on screen, and
+    // the adaptive music tempo is only ever applied during live play.
+    const st = game.state;
+    const inStage = st === State.PLAYING || st === State.PLAYER_DEAD || st === State.BOSS_DEFEATED || st === State.LEVEL_CLEAR;
+    AudioSys.ambient(inStage ? game.theme : '');
+    if (st !== State.PLAYING) { AudioSys.setMusicRate(1); AudioSys.setMusicVolume(1); }
 
     if (game.state !== this.lastState) {
       document.body.dataset.state = game.state;

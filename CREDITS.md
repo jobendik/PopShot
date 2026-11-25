@@ -21,6 +21,31 @@ libraries (source archives and WAV masters are kept outside the repo — see
 - **Kenney UI Audio** (CC0)
 - **Shapeforms Audio Free Sound Effects** (royalty-free license)
 
-None of these licenses require in-game attribution; this file records
-provenance so the licensing status of every shipped asset is auditable
-before store submission.
+### Provenance status — unresolved, read before publishing
+
+The list above is what this file has always claimed. It has **not** been
+independently verified, and the repository cannot verify it:
+
+- There is no per-file manifest mapping each of the ~150 shipped SFX and 3
+  music tracks to the library (and library edition/year) it came from. The
+  source archives and WAV masters are deliberately kept outside the repo.
+- No licence texts are included for any audio library.
+- "Royalty-free" is not one licence. Terms differ per library and sometimes
+  per edition (for example, each year's Sonniss GDC bundle ships its own
+  licence, and its terms on redistribution and on use in generative/AI
+  tooling should be read for the specific year used).
+- The three music tracks (`public/music/*.mp3`, ~8.6 MB) have no stated
+  source at all beyond the general list above.
+
+Before a commercial release someone with access to the original archives
+should (1) write that manifest, (2) add the licence texts, and (3) replace
+anything that cannot be traced. Until then, treat the audio as *believed*
+licensed, not *confirmed* licensed.
+
+### Added in the systems overhaul
+
+No new audio files were added. New sounds — the per-world pop melody, dash,
+graze, PopShot, wind, rumble, fuse — are synthesised at runtime with the Web
+Audio API (`src/systems/audio.ts`) and are original to this project. The
+overhaul also wired up ~80 already-shipped SFX that the game previously never
+played.

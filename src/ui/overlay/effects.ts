@@ -30,7 +30,7 @@ let chromAbHost:  HTMLElement | null = null;
 
 // Queue + concurrency for medals so they don't stack into an unreadable wall
 // during a chain. Up to 3 visible at once; the rest wait their turn.
-const MEDAL_CONCURRENT_MAX = 3;
+const MEDAL_CONCURRENT_MAX = 1;
 const MEDAL_INTERVAL_MS = 280;
 const medalQueue: MedalSpec[] = [];
 let medalsActive = 0;
@@ -39,7 +39,7 @@ let medalPumpTimer: number | null = null;
 // Soft cap on visible toasts so a burst doesn't carpet the screen. Phones
 // have far less room (a 16:9 stage letterboxed inside browser chrome), so we
 // keep only two stacked at once there — more than that buries the play field.
-const TOAST_VISIBLE_MAX = isTouchDevice ? 2 : 4;
+const TOAST_VISIBLE_MAX = isTouchDevice ? 1 : 2;
 
 export type MedalTier = 'bronze' | 'silver' | 'gold' | 'plat' | 'mythic';
 export type ToastKind  = 'success' | 'warn' | 'info' | 'danger';

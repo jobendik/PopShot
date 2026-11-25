@@ -75,70 +75,57 @@ function buildShell(title: string, screenName: GameState): HTMLElement {
 }
 
 export function buildControls(): HTMLElement {
-  const root = buildShell('Controls', State.CONTROLS);
-  const rows: Row[] = isTouchDevice ? [
-    { label: 'Move',  value: 'On-screen ◀ ▶ buttons' },
-    { label: 'Fire',  value: 'On-screen ▲ FIRE button' },
+  const root = buildShell('How to Play', State.CONTROLS);
+  root.classList.add('info--howto');
+  const controls: Row[] = isTouchDevice ? [
+    { label: 'Move',  value: 'Hold the left or right side' },
+    { label: 'Fire',  value: 'Automatic' },
+    { label: 'Dash',  value: 'Double-tap a side' },
     { label: 'Pause', value: 'Top-right pause icon' },
   ] : [
-    { label: 'Move',          value: 'A / D  or  ← / →', kbd: true },
-    { label: 'Fire',          value: 'Space or W or ↑',  kbd: true },
-    { label: 'Pause',         value: 'P or Esc',          kbd: true },
-    { label: 'Restart',       value: 'R',                kbd: true },
-    { label: 'Mute',          value: 'M',                kbd: true },
+    { label: 'Move',    value: 'A / D  or  ← / →', kbd: true },
+    { label: 'Fire',    value: 'Space',            kbd: true },
+    { label: 'Dash',    value: 'Shift or S or ↓',  kbd: true },
+    { label: 'Pause',   value: 'P or Esc',         kbd: true },
+    { label: 'Restart', value: 'R',                kbd: true },
+    { label: 'Mute',    value: 'M',                kbd: true },
+    { label: 'Player 2 joins', value: 'I', kbd: true },
+    { label: 'P2 move / fire / dash', value: 'J L / I / O', kbd: true },
     {
-      label: 'PS5 Move',
-      value: controllerValue(
-        controllerChip('LS', 'stick'),
-        controllerChip('+', 'dpad'),
-      ),
+      label: 'Gamepad move',
+      value: controllerValue(controllerChip('LS', 'stick'), controllerChip('+', 'dpad')),
       rich: true,
     },
     {
-      label: 'PS5 Fire',
-      value: controllerValue(controllerChip('X', 'cross')),
+      label: 'Gamepad fire / dash',
+      value: controllerValue(controllerChip('X', 'cross'), controllerChip('L1', 'options'), controllerChip('R1', 'options')),
       rich: true,
     },
-    {
-      label: 'PS5 Pause/Back',
-      value: controllerValue(
-        controllerChip('O', 'circle'),
-        controllerChip('OPT', 'options'),
-      ),
-      rich: true,
-    },
-    {
-      label: 'PS5 Restart/Mute',
-      value: controllerValue(
-        controllerChip('[]', 'square'),
-        controllerChip('△', 'triangle'),
-      ),
-      rich: true,
-    },
-    { label: 'P2 Move',       value: 'J / L',            kbd: true },
-    { label: 'P2 Fire',       value: 'I or K or U',      kbd: true },
-    {
-      label: 'PS5 P2 Move',
-      value: controllerValue(
-        controllerChip('LS', 'stick'),
-        controllerChip('+', 'dpad'),
-      ),
-      rich: true,
-    },
-    {
-      label: 'PS5 P2 Fire',
-      value: controllerValue(
-        controllerChip('X', 'cross'),
-        controllerChip('O', 'circle'),
-      ),
-      rich: true,
-    },
-    { label: 'PS5 P2 Join',   value: 'Connect 2nd controller' },
-    { label: 'PS5 P3 Join/Move', value: 'Connect 3rd controller' },
-    { label: 'PS5 P4 Join/Move', value: 'Connect 4th controller' },
+    { label: 'Players 2–4', value: 'Each extra gamepad joins' },
+  ];
+  // The systems that turn "pop everything" into a score game. One line each:
+  // what it is, and what to do about it.
+  const tips: [string, string, string][] = [
+    ['CHAIN', '#ffd60a', 'Every pop refills the chain ring. A longer chain multiplies your score up to ×5 — and one unbroken chain for the whole stage is a PERFECT.'],
+    ['POPSHOT', '#fff3b0', 'Pops, tricks and near misses charge the gold bar under your bot. When it is full, your next shot bursts an entire ball family at once.'],
+    ['DASH', '#9be7ff', 'A short burst you cannot be hurt during. Dash straight through a ball for a PHASE bonus.'],
+    ['GRAZE', '#9be7ff', 'Let a ball skim past you without touching: bonus score and PopShot charge.'],
+    ['ELECTRIC', '#ffe14a', 'Popping an electric ball arcs to the nearest ball and pops that too.'],
+    ['BOMB BALLS', '#ff9a3c', 'Shoot one to light its fuse. Everything in the ring pops; the red core knocks you out.'],
+    ['HOT & STICKY', '#9be15d', 'Balls landing on lava patches bounce higher. On slime they bounce low and fast.'],
   ];
   const rowsEl = root.querySelector<HTMLElement>('[data-role="rows"]')!;
-  rowsEl.innerHTML = rowHtml(rows);
+  rowsEl.innerHTML = `
+    <div class="howto">
+      <div class="howto__col">
+        <div class="howto__head">Controls</div>
+        ${rowHtml(controls)}
+      </div>
+      <div class="howto__col">
+        <div class="howto__head">How to score big</div>
+        ${tips.map(t => `<div class="howto__tip"><b style="color:${t[1]}">${t[0]}</b><span>${t[2]}</span></div>`).join('')}
+      </div>
+    </div>`;
   return root;
 }
 
@@ -147,8 +134,10 @@ export function buildCredits(): HTMLElement {
   const rows: Row[] = [
     { label: 'Game design', value: 'PopShot Team' },
     { label: 'Code',        value: 'TypeScript + Vite' },
-    { label: 'Audio',       value: 'Real-asset SFX + WebAudio synth' },
-    { label: 'Inspired by', value: 'Pang / Buster Bros' },
+    { label: 'Art',         value: 'Procedural — drawn in code' },
+    { label: 'Audio',       value: 'Licensed SFX libraries + WebAudio synth' },
+    { label: 'Fonts',       value: 'Bowlby One, Inter (SIL OFL)' },
+    { label: 'In the tradition of', value: 'Classic ball-popping arcade games' },
     { label: 'Engine',      value: 'Custom Canvas + DOM' },
     { label: 'Built for',   value: 'CrazyGames' },
   ];
@@ -196,14 +185,28 @@ export function syncHighScores(game: Game, root: HTMLElement) {
   const rows: Row[] = [
     { label: 'CrazyGames Leaderboard', value: Storage.data.leaderboardPanicSubmitted > 0 ? 'Panic ' + Storage.data.leaderboardPanicSubmitted.toLocaleString() : 'Panic Mode ready' },
     { label: 'Weekly · ' + weekly.label, value: weeklyValue },
+    { label: 'Best Score Attack', value: (Storage.data.bestScoreAttack || 0).toLocaleString() },
     { label: 'Best Panic Score', value: (Storage.data.bestPanicScore || 0).toLocaleString() },
     { label: 'Best Panic Wave', value: String(Storage.data.bestPanicWave || 0) },
+    { label: 'Best Boss Rush', value: (Storage.data.bestBossRush || 0).toLocaleString() + '  ·  ' + (Storage.data.bestBossRushCount || 0) + '/3 bosses' },
+    { label: 'Perfect Chains', value: String(Storage.data.perfectChains || 0) },
     ...LEVELS.map((L, i) => ({
     label: `${i + 1}. ${L.name}`,
     value: (tour[L.id] || 0).toLocaleString(),
     })),
   ];
-  root.querySelector<HTMLElement>('[data-role="rows"]')!.innerHTML = rowHtml(rows);
+  // Records set before the scoring overhaul are kept, clearly labelled, rather
+  // than mixed in with scores they cannot be compared to.
+  const lg = Storage.data.legacy;
+  if (lg && (lg.scoreAttack || lg.panicScore || lg.bossRush || lg.panicWave)) {
+    rows.push({ label: 'Classic · Score Attack', value: (lg.scoreAttack || 0).toLocaleString() });
+    rows.push({ label: 'Classic · Panic', value: (lg.panicScore || 0).toLocaleString() + '  ·  wave ' + (lg.panicWave || 0) });
+    rows.push({ label: 'Classic · Boss Rush', value: (lg.bossRush || 0).toLocaleString() });
+  }
+  const html = rowHtml(rows);
+  const el = root.querySelector<HTMLElement>('[data-role="rows"]')!;
+  // Only touch the DOM when something actually changed (this runs per frame).
+  if (el.dataset.sig !== html) { el.dataset.sig = html; el.innerHTML = html; }
 }
 
 export function buildProfile(game: Game): HTMLElement {

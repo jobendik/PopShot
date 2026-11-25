@@ -582,9 +582,16 @@ function drawMidLayer(ctx: CanvasRenderingContext2D, theme: ThemeName, t: number
       ctx.fillRect(px, GROUND_Y - 26, 80, 6);
     }
   } else if (theme === 'airship') {
-    // Main airship — central, larger, with rigging detail.
+    // Escort airship — pushed back into the distance (smaller, higher, hazed
+    // by atmospheric perspective, slowly drifting). At full size and contrast
+    // in the middle of the arena it read as a solid platform.
     const ax = W / 2;
     const ay = GROUND_Y - 120;
+    ctx.save();
+    ctx.translate(W / 2 + Math.sin(t * 0.07) * 70, 214 + Math.sin(t * 0.4) * 4);
+    ctx.scale(0.6, 0.6);
+    ctx.translate(-ax, -ay);
+    ctx.globalAlpha = 0.5;
     // Balloon body
     const bg = ctx.createLinearGradient(0, ay - 52, 0, ay + 52);
     bg.addColorStop(0, '#8d7460');
@@ -625,6 +632,7 @@ function drawMidLayer(ctx: CanvasRenderingContext2D, theme: ThemeName, t: number
     for (let i = 0; i < 5; i++) {
       ctx.fillRect(ax - 70 + i * 32, ay + 42, 14, 12);
     }
+    ctx.restore();
   } else if (theme === 'boss') {
     // Energy spirals — two counter-rotating arcs across the upper sky.
     for (let arm = 0; arm < 2; arm++) {
@@ -1049,13 +1057,22 @@ function drawCeiling(ctx: CanvasRenderingContext2D, theme: ThemeName) {
 // function returns, so they always sit in front of the stage.
 // =====================================================================
 
-export function drawBackground(ctx, theme, t) {
+/** `parallax` is the camera lean in [-1, 1] (the player's side of the arena).
+ *  Each depth layer slides a little further than the one behind it, which is
+ *  enough to turn four flat cut-outs into a scene with depth. The largest
+ *  shift (13px) stays inside the 16px side walls, so no edge is ever exposed. */
+export function drawBackground(ctx, theme, t, parallax = 0) {
   drawSky(ctx, theme);
   drawCelestial(ctx, theme, t);
+  ctx.save();
+  ctx.translate(-parallax * 4, 0);
   drawFarLayer(ctx, theme, t);
+  ctx.translate(-parallax * 4, 0);
   drawMidLayer(ctx, theme, t);
   drawAmbience(ctx, theme, t);
+  ctx.translate(-parallax * 5, 0);
   drawNearLayer(ctx, theme, t);
+  ctx.restore();
   drawFloor(ctx, theme);
   drawWalls(ctx, theme);
   drawCeiling(ctx, theme);

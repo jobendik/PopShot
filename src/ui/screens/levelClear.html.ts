@@ -129,11 +129,13 @@ function runRewardSequence(game: Game, root: HTMLElement) {
   const rows: SeqRow[] = [
     { label: 'Base Score', prefix: '+', target: s.base },
     { label: 'Time Bonus', prefix: '+', target: s.time },
-    { label: 'Accuracy',   prefix: '+', target: s.accuracy },
-    { label: 'Combo',      prefix: '+', target: s.combo },
-    { label: 'No-Miss',    prefix: '+', target: s.noMiss },
+    { label: 'Best Chain', prefix: '+', target: s.chain },
   ];
-  if (s.tricks > 0) rows.push({ label: 'Tricks', raw: '×' + s.tricks });
+  // Only bonuses that were actually earned get a row — the card stays short
+  // on an ordinary clear and grows when the run was special.
+  if (s.style > 0)    rows.push({ label: 'Style', prefix: '+', target: s.style });
+  if (s.flawless > 0) rows.push({ label: 'Flawless', prefix: '+', target: s.flawless });
+  if (s.perfect > 0)  rows.push({ label: 'PERFECT CHAIN', prefix: '+', target: s.perfect, cls: 'ui-stat-row__value--win' });
   rows.push({ label: 'Total', prefix: '', target: s.total, cls: 'ui-stat-row__value--win', big: true });
   if (s.best > 0) rows.push({ label: 'Best', raw: s.best.toLocaleString(), cls: 'ui-stat-row__value--best' });
   if (s.newComboBest) rows.push({ label: 'NEW COMBO BEST', raw: '!', cls: 'ui-stat-row__value--win' });
@@ -264,11 +266,25 @@ export function buildBossDefeated(_game: Game): HTMLElement {
   card.className = 'overlay-card';
   card.innerHTML = `
     <h2 class="ui-heading ui-heading--display ui-heading--win overlay-card__title">Boss Defeated!</h2>
-    <div class="overlay-card__sub">Commander RIFT goes down in flames.</div>
+    <div class="overlay-card__sub" data-role="boss-line">Down in flames.</div>
   `;
   card.appendChild(confettiLayer(30));
   root.appendChild(card);
   return root;
+}
+
+const BOSS_EPITAPH: Record<string, string> = {
+  globo: 'The King is in pieces. All sixteen of them.',
+  volta: 'VOLTA is grounded. Its own bombs did it.',
+  rift:  'Commander RIFT goes down in flames.',
+};
+
+/** Per-frame sync: name the boss that actually fell. */
+export function syncBossDefeated(game: Game, root: HTMLElement) {
+  const el = root.querySelector<HTMLElement>('[data-role="boss-line"]');
+  if (!el || !game.boss) return;
+  const text = BOSS_EPITAPH[game.boss.kind] || 'Down in flames.';
+  if (el.textContent !== text) el.textContent = text;
 }
 
 export function buildVictory(game: Game): HTMLElement {
@@ -281,7 +297,7 @@ export function buildVictory(game: Game): HTMLElement {
   card.className = 'overlay-card';
   card.innerHTML = `
     <h2 class="ui-heading ui-heading--display ui-heading--win overlay-card__title">VICTORY!</h2>
-    <div class="overlay-card__sub">The Commander has fallen.</div>
+    <div class="overlay-card__sub" data-role="victory-line">The Commander has fallen.</div>
     <div class="overlay-card__stats">
       <div class="ui-stat-row">
         <span class="ui-stat-row__label">Final Score</span>
@@ -312,5 +328,12 @@ export function syncVictory(game: Game, root: HTMLElement) {
   const score = root.querySelector<HTMLElement>('[data-role="final-score"]');
   if (score) score.textContent = game.score.toLocaleString();
   const bc = root.querySelector<HTMLElement>('[data-role="boss-count"]');
-  if (bc) bc.textContent = String(game.bossRushCount || (game.mode === 'tour' ? 1 : 0));
+  if (bc) bc.textContent = String(game.bossRushCount || (game.mode === 'tour' ? 3 : 0));
+  const line = root.querySelector<HTMLElement>('[data-role="victory-line"]');
+  if (line) {
+    const text = game.mode === 'boss_rush'
+      ? 'Three bosses, one run. Nothing left standing.'
+      : 'Six worlds. Three bosses. The Commander has fallen.';
+    if (line.textContent !== text) line.textContent = text;
+  }
 }

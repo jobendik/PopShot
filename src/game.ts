@@ -1,19 +1,22 @@
 import { CEILING_Y, GROUND_Y, H, State, W, type BallType, type DailyModifierId, type DeathReason, type GameMode, type GameState, type ThemeName } from './constants';
-import { LEVELS } from './data/levels';
+import { BOSS_INDICES, LEVELS, type LevelDefinition } from './data/levels';
 import { Ball } from './entities/ball';
-import { Boss } from './entities/boss';
+import { createBoss, type Boss } from './entities/bosses';
+import { Bumper, Fan, calmWind, type WindState } from './entities/gadgets';
 import { Crab } from './entities/crab';
 import { Creature } from './entities/creature';
 import { Destructible } from './entities/destructible';
 import { Hazard } from './entities/hazard';
-import { Particle, FloatingText, Shockwave, SmokeCloud } from './entities/particle';
+import { Bolt, Particle, FloatingText, PopBurst, Shockwave, SmokeCloud } from './entities/particle';
 import { Pickup } from './entities/pickup';
 import { Platform } from './entities/platform';
 import { Player } from './entities/player';
 import { Projectile } from './entities/projectile';
 import { emit } from './systems/analytics';
 import { AudioSys } from './systems/audio';
-import { clearLevel, explodeProjectile, killPlayer, popBall } from './systems/combat';
+import { breakCrate, clearLevel, creditPop, explodeProjectile, killPlayer, popBall, type PopSource } from './systems/combat';
+import { hash32, randomSeed, seedRng } from './systems/rng';
+import { advancePanic, startPanicRun } from './systems/panic';
 import { consumePressed, flushHoverSound, isTouchDevice, keysPressed, pointer, tickAutoFire, tickGamepadInputs } from './systems/input';
 import { Storage } from './systems/storage';
 import { pickDailyChallenge, type DailyPick } from './systems/daily';
@@ -21,7 +24,7 @@ import { advanceMissions, getWeeklyEvent, recordWeeklyCombo, recordWeeklyPanic, 
 import { computeTotalXp } from './systems/progression';
 // Aliased to Sdk to avoid colliding with the `Platform` entity class above.
 import { Platform as Sdk } from './systems/platform';
-import { clamp, rand, randi } from './utils';
+import { clamp, rand } from './utils';
 import { UI } from './ui/domRoot';
 
 // State-handler modules. Each owns its update() entry point; the canvas
@@ -55,9 +58,14 @@ const MAX_DPR = 3;
 export interface LevelSummary {
   base: number;
   time: number;
-  accuracy: number;
-  combo: number;
-  noMiss: number;
+  /** Longest chain × 60. */
+  chain: number;
+  /** Tricks and grazes. */
+  style: number;
+  /** No life lost on this stage. */
+  flawless: number;
+  /** The whole stage in one unbroken chain. */
+  perfect: number;
   total: number;
   best: number;
   /** Trick count earned this run (CLUTCH, AIR POP, etc). Optional — when
@@ -104,6 +112,61 @@ export class Game {
   crabs: Crab[];
   creatures: Creature[];
   boss: Boss | null;
+  // ---- World mechanics (see entities/gadgets.ts) ----
+  bumpers: Bumper[];
+  fans: Fan[];
+  wind: WindState;
+  /** True on a frozen floor: the player has inertia. */
+  iceFloor: boolean;
+  /** Current gravity multiplier (a boss can bend it temporarily). */
+  gravityScale: number;
+  /** The arena's resting gravity multiplier. */
+  baseGravityScale: number;
+  /** Volcano eruption schedule, or null. */
+  eruption: { interval: number; count: number; timer: number } | null;
+  /** Lightning bolts and pop bursts — cosmetic effect lists. */
+  bolts: Bolt[];
+  bursts: PopBurst[];
+  // ---- PopShot meter / graze / chain bookkeeping ----
+  popCharge: number;
+  popShotReady: boolean;
+  grazeStreak: number;
+  grazeStreakT: number;
+  runGrazes: number;
+  runDashes: number;
+  runPopShots: number;
+  /** The chain window the current chain was last refreshed to (HUD ring). */
+  comboWindow: number;
+  /** Pops landed on this stage, lives lost on it, and whether a chain ever
+   *  lapsed — together they decide the FLAWLESS and PERFECT CHAIN bonuses. */
+  levelPops: number;
+  levelDeaths: number;
+  chainBroken: boolean;
+  /** Multi-pop window tallies (reset when the window closes). */
+  chainScore: number;
+  chainArcs: number;
+  chainBlasts: number;
+  chainCascade: number;
+  /** Bitmask of player numbers that contributed to the current window. */
+  chainOwners: number;
+  /** Bumped whenever a run starts or is abandoned. Async platform callbacks
+   *  (rewarded ads, midgame ads) capture it and bail if it has moved on. */
+  runToken = 0;
+  /** Debug snapshot of the ball nearest the player at the last ball death. */
+  lastDeathInfo: Record<string, unknown> | null = null;
+  /** Smoothed camera lean for background parallax, in [-1, 1]. */
+  parallax = 0;
+  /** Sky-flare clock for a volcano eruption (1 → 0). */
+  eruptFlash: number;
+  /** Seed the current stage's gameplay RNG was started from. */
+  runSeed: number;
+  /** Simulation clock for the current stage (advances only while playing). */
+  simT: number;
+  /** Test hook: when true the rAF loop renders but does not step the sim. */
+  manualStep: boolean;
+  /** Test hook: when set, every stage starts from this seed instead of a
+   *  fresh random one (the Daily still uses its date seed). */
+  forcedSeed: number | null;
   /** Boss Rush queue (boss-level indices remaining). When non-empty we cycle
    *  through and progress to victory when the queue empties. */
   bossRushQueue: number[];
@@ -228,6 +291,36 @@ export class Game {
     this.crabs = [];
     this.creatures = [];
     this.boss = null;
+    this.bumpers = [];
+    this.fans = [];
+    this.wind = calmWind();
+    this.iceFloor = false;
+    this.gravityScale = 1;
+    this.baseGravityScale = 1;
+    this.eruption = null;
+    this.bolts = [];
+    this.bursts = [];
+    this.popCharge = 0;
+    this.popShotReady = false;
+    this.grazeStreak = 0;
+    this.grazeStreakT = 0;
+    this.runGrazes = 0;
+    this.runDashes = 0;
+    this.runPopShots = 0;
+    this.comboWindow = 3;
+    this.levelPops = 0;
+    this.levelDeaths = 0;
+    this.chainBroken = false;
+    this.chainScore = 0;
+    this.chainArcs = 0;
+    this.chainBlasts = 0;
+    this.chainCascade = 0;
+    this.chainOwners = 0;
+    this.eruptFlash = 0;
+    this.runSeed = 1;
+    this.simT = 0;
+    this.manualStep = false;
+    this.forcedSeed = null;
     this.bossRushQueue = [];
     this.bossRushCount = 0;
     this.panicGauge = 0;
@@ -299,10 +392,15 @@ export class Game {
   // ============================ LIFECYCLE ============================
   /** Reset per-run flags that should not survive across separate runs. */
   _resetRunFlags() {
+    this.runToken++;
     this.usedRewardedContinue = false;
     this.rewardedOffered = false;
     this.awaitingAd = false;
     this.lastDeathReason = null;
+    // The PopShot meter is a per-run resource: it carries between stages of
+    // one run but never leaks from one run into the next.
+    this.popCharge = 0;
+    this.popShotReady = false;
   }
 
   startTour(levelIndex = 0) {
@@ -329,8 +427,8 @@ export class Game {
     const best = Storage.data.bestScoreAttack || 0;
     this.introTitle = 'SCORE ATTACK';
     this.introText = best > 0
-      ? 'Beat your best: ' + best.toLocaleString()
-      : 'Cycle the levels. Set your first best.';
+      ? 'Three lives. The whole Tour. One score.\nBeat your best: ' + best.toLocaleString()
+      : 'Three lives. The whole Tour. One score.\nYour PopShot meter carries between stages.';
     this.introTimer = 3;
   }
 
@@ -354,13 +452,8 @@ export class Game {
   }
 
   startBossRush() {
-    // The Boss Rush queues every boss-flagged level in the game (currently just
-    // Commander RIFT, but the loop is forward-compatible with future bosses).
-    const bossIndices: number[] = [];
-    for (let i = 0; i < LEVELS.length; i++) if (LEVELS[i].boss) bossIndices.push(i);
-    // Repeat the boss roster so the run has at least 3 fights — gives the mode
-    // arcade pacing instead of a single encounter that ends instantly.
-    while (bossIndices.length < 3) bossIndices.push(...bossIndices);
+    // Every boss in Tour order, back to back, on one set of lives.
+    const bossIndices = BOSS_INDICES.slice();
     this.mode = 'boss_rush';
     emit('mode.start', { mode: this.mode });
     this.modifier = null;
@@ -371,8 +464,8 @@ export class Game {
     this.bossRushCount = 0;
     this.loadLevel(bossIndices[0]);
     this.introTitle = 'BOSS RUSH';
-    this.introText = 'Defeat every boss in sequence. No retries between fights.';
-    this.introTimer = 4;
+    this.introText = 'Three bosses. Three lives. No breaks.\n' + LEVELS[bossIndices[0]].name + ' is first.';
+    this.introTimer = 3.5;
   }
 
   startPanic() {
@@ -385,30 +478,21 @@ export class Game {
     this._resetRunFlags();
     this.preRunTotalXp = computeTotalXp(Storage.data);
     this.preRunStageBest = 0;
-    this.panicWave = 0;
-    this.theme = 'boss';
-    this.levelName = 'PANIC MODE';
+    this.preRunMaxCombo = Storage.data.lifetimeMaxCombo || 0;
+    this.seedRun(this.forcedSeed ?? randomSeed());
+    this.resetStageState();
+    this.clearArena();
     this.targetScore = 0;
     this.timer = 999;
-    this.balls = []; this.projectiles = []; this.pickups = [];
-    this.platforms = []; this.destructibles = []; this.hazards = [];
-    this.particles = []; this.shockwaves = []; this.smokeClouds = []; this.floatingTexts = []; this.crabs = [];
-    this.creatures = [];
-    this.panicGauge = 0;
-    this.panicStarTimer = 22;
-    this.lastBallSlowmo = false;
     this.player = new Player(W / 2, GROUND_Y - 0);
-    this.player2 = null;
-    this.player3 = null;
-    this.player4 = null;
+    this.player.invuln = 1.5;
+    if (this.player2) { this.player2 = new Player(W / 2 + 64, GROUND_Y, 2); this.player2.invuln = 1.5; }
+    if (this.player3) { this.player3 = new Player(W / 2 - 128, GROUND_Y, 3); this.player3.invuln = 1.5; }
+    if (this.player4) { this.player4 = new Player(W / 2 + 128, GROUND_Y, 4); this.player4.invuln = 1.5; }
     this.boss = null;
     this.bossLevel = false;
     this.state = State.PLAYING;
-    this.advancePanicWave();
-    // Mode-specific framing — Panic has no per-level intro otherwise. Set
-    // *after* advancePanicWave so the wave-1 levelName doesn't overwrite
-    // the intro banner header (it doesn't anymore, but order makes intent
-    // obvious to a future reader).
+    startPanicRun(this);
     const best = Storage.data.bestPanicWave || 0;
     const weekly = getWeeklyEvent();
     this.introTitle = 'PANIC MODE';
@@ -418,27 +502,69 @@ export class Game {
     this.introTimer = 3;
   }
 
-  advancePanicWave() {
-    this.panicWave++;
-    this.levelName = 'Panic Wave ' + this.panicWave;
-    AudioSys.levelClear();
-    this.floatingTexts.push(new FloatingText(W / 2, H / 2, 'WAVE ' + this.panicWave, '#ffd60a', 48));
-    const count = Math.min(2 + Math.floor(this.panicWave / 2), 8);
-    const minSize = clamp(2 - Math.floor(this.panicWave / 5), 0, 2);
-    const maxSize = clamp(3 + Math.floor(this.panicWave / 4), 3, 4);
-    const specials: BallType[] = ['normal','normal','electric','explosive','smoke','sludge','armored','lava'];
-    for (let i = 0; i < count; i++) {
-      const size = randi(minSize, maxSize);
-      const types: BallType[] = this.panicWave < 3 ? ['normal'] : specials.slice(0, Math.min(specials.length, 2 + Math.floor(this.panicWave / 2)));
-      const type = types[randi(0, types.length - 1)];
-      this.balls.push(new Ball(rand(80, W - 80), CEILING_Y + 40, size, type, rand(-150, 150), 0));
+  advancePanicWave() { advancePanic(this); }
+
+  /** Start the gameplay RNG for a stage. Everything that can change the
+   *  outcome draws from it, so (seed, inputs) reproduces a run exactly. */
+  seedRun(seed: number) {
+    this.runSeed = seed >>> 0;
+    seedRng(this.runSeed);
+  }
+
+  /** Empty every entity list and neutralise every arena mechanic. */
+  clearArena() {
+    this.balls = []; this.projectiles = []; this.pickups = [];
+    this.platforms = []; this.destructibles = []; this.hazards = [];
+    this.particles = []; this.shockwaves = []; this.smokeClouds = []; this.floatingTexts = [];
+    this.crabs = []; this.creatures = [];
+    this.bumpers = []; this.fans = [];
+    this.bolts = []; this.bursts = [];
+    this.wind = calmWind();
+    this.iceFloor = false;
+    this.gravityScale = 1;
+    this.baseGravityScale = 1;
+    this.eruption = null;
+  }
+
+  /** Per-stage counters and timed effects. */
+  resetStageState() {
+    this.combo = 0; this.maxCombo = 0; this.comboDecay = 0; this.comboWindow = 3;
+    this.shotsHit = 0; this.shotsFired = 0;
+    this.chainCount = 0; this.chainTimer = 0; this.chainScore = 0;
+    this.chainArcs = 0; this.chainBlasts = 0; this.chainCascade = 0; this.chainOwners = 0;
+    this.runTricks = 0; this.runGrazes = 0; this.runDashes = 0; this.runPopShots = 0;
+    this.grazeStreak = 0; this.grazeStreakT = 0;
+    this.levelPops = 0; this.levelDeaths = 0; this.chainBroken = false;
+    this.shake = 0; this.flash = 0; this.slowTime = 0; this.freezeTime = 0;
+    this.magnetTime = 0; this.comboBoostTime = 0; this.hitPause = 0;
+    this.lastBallSlowmo = false;
+    this.bossDefeatedTimer = 0; this.lastTimerWarning = 0;
+    this.simT = 0;
+  }
+
+  /** Install a stage's world mechanics (wind / ice / bumpers / fans /
+   *  eruptions / gravity), then layer any Daily modifier on top. */
+  setupArena(L: Pick<LevelDefinition, 'wind' | 'ice' | 'bumpers' | 'fans' | 'eruption' | 'gravity'>) {
+    this.wind = calmWind();
+    if (L.wind) {
+      this.wind.strength = L.wind.strength;
+      this.wind.gapMin = L.wind.gapMin;
+      this.wind.gapMax = L.wind.gapMax;
+      this.wind.timer = L.wind.gapMin * 0.6;
     }
-    if (this.panicWave % 3 === 0) {
-      this.pickups.push(new Pickup(W / 2 + rand(-200, 200), H / 2, 'shield'));
+    this.iceFloor = !!L.ice;
+    this.baseGravityScale = L.gravity ?? 1;
+    this.bumpers = (L.bumpers || []).map((b, i) => new Bumper(b.x, b.y, b.r ?? 22, ['#ff36c4', '#48bfe3', '#ffd60a'][i % 3]));
+    this.fans = (L.fans || []).map(f => new Fan(f.x, f.w ?? 120, f.on ?? 3.2, f.off ?? 3.4, f.phase ?? 0));
+    this.eruption = L.eruption ? { interval: L.eruption.interval, count: L.eruption.count, timer: L.eruption.first ?? L.eruption.interval } : null;
+    // Daily modifiers that re-use a world mechanic.
+    if (this.modifier === 'windstorm') {
+      this.wind.strength = Math.max(this.wind.strength, 300);
+      this.wind.gapMin = 2.5; this.wind.gapMax = 4; this.wind.timer = 2;
     }
-    if (this.panicWave % 5 === 0) {
-      this.hazards.push(new Hazard('falling_rock', rand(80, W - 120), CEILING_Y + 10, 28, 28, 6));
-    }
+    if (this.modifier === 'moon_bounce') this.baseGravityScale = 0.5;
+    if (this.modifier === 'black_ice') this.iceFloor = true;
+    this.gravityScale = this.baseGravityScale;
   }
 
   loadLevel(index: number) {
@@ -446,7 +572,7 @@ export class Game {
       this.state = State.VICTORY;
       return;
     }
-    const L = LEVELS[index];
+    const L: LevelDefinition = LEVELS[index];
     this.levelIndex = index;
     this.theme = L.theme;
     this.timer = L.timeLimit;
@@ -454,19 +580,21 @@ export class Game {
     this.levelName = L.name;
     this.bossLevel = !!L.boss;
     this.levelScoreStart = this.score;
-    this.introText = L.intro || '';
-    // The level-1 tutorial line is written for keyboards; on touch devices
-    // describe the actual controls: half-screen hold zones + always-on
-    // auto-fire (there is no FIRE button on touch).
-    if (index === 0 && isTouchDevice && L.intro) {
-      this.introText = 'Hold the LEFT or RIGHT side to move.\nYou fire automatically — pop every ball!';
-    }
+    // Touch devices get the touch-specific wording where a stage has one.
+    this.introText = (isTouchDevice && L.introTouch) ? L.introTouch : (L.intro || '');
     this.introTimer = L.intro ? 4 : 0;
     this.introTitle = '';
+
+    // Seed BEFORE anything is spawned: the Daily uses the date so every
+    // player gets the same bounces; every other mode rolls a fresh seed.
+    this.seedRun(this.mode === 'daily' && this.daily
+      ? hash32('popshot-daily:' + this.daily.date + ':' + L.id)
+      : (this.forcedSeed ?? randomSeed()));
 
     // Apply daily modifier transformations as the level is built.
     const bigBubbles = this.modifier === 'big_bubbles';
     const noPickups  = this.modifier === 'no_pickups';
+    const liveWires  = this.modifier === 'live_wires';
 
     // First-ever-session Level-1 onboarding: slow horizontal velocity by 35%
     // on the absolute first run so a brand-new player has time to read the
@@ -477,55 +605,46 @@ export class Game {
       && index === 0;
     this.firstRunHintAge = firstEver ? 0 : -1;
 
-    this.balls = L.balls.map(b => new Ball(
-      b.x, b.y,
-      bigBubbles ? Math.min(4, (b.size ?? 2) + 1) : b.size,
-      b.type || 'normal',
-      firstEver ? (b.vx || 0) * 0.65 : (b.vx || 0),
-      b.vy || 0,
-    ));
+    this.clearArena();
+    this.resetStageState();
+    this.setupArena(L);
+
+    this.balls = L.balls.map(b => {
+      let type = b.type || 'normal';
+      if (liveWires && type !== 'bonus' && type !== 'explosive') type = 'electric';
+      return new Ball(
+        b.x, b.y,
+        bigBubbles ? Math.min(4, (b.size ?? 2) + 1) : b.size,
+        type,
+        firstEver ? (b.vx || 0) * 0.65 : (b.vx || 0),
+        b.vy || 0,
+      );
+    });
     this.platforms = (L.platforms || []).map(p => new Platform(p.x, p.y, p.w, p.h, p));
     this.destructibles = (L.destructibles || []).map(d => new Destructible(d.x, d.y, d.w, d.h, noPickups ? null : d.contains));
     this.pickups = noPickups ? [] : (L.pickups || []).map(p => new Pickup(p.x, p.y, p.type));
     this.hazards = (L.hazards || []).map(h => new Hazard(h.type, h.x, h.y, h.w, h.h, h.life ?? 999));
-    this.projectiles = [];
-    this.particles = [];
-    this.shockwaves = [];
-    this.smokeClouds = [];
-    this.floatingTexts = [];
-    this.crabs = (L.crabs || []).map(c => new Crab(c.x, (c as any).y ?? GROUND_Y, c.minX, c.maxX, c.speed));
-    // Creatures spawn on a per-level basis (data field) or are added at
-    // runtime by Panic / Boss Rush spawners.
+    this.crabs = (L.crabs || []).map(c => new Crab(c.x, c.y ?? GROUND_Y, c.minX, c.maxX, c.speed));
     this.creatures = (L.creatures || []).map(c =>
       new Creature(c.kind, c.x, c.y ?? (c.kind === 'dragon' ? GROUND_Y : 180), c.dir ?? 1));
-    this.combo = 0; this.maxCombo = 0;
-    this.shotsHit = 0; this.shotsFired = 0;
-    this.chainCount = 0; this.chainTimer = 0;
-    this.runTricks = 0;
     this.preRunMaxCombo = Storage.data.lifetimeMaxCombo || 0;
     this.preRunTotalXp = computeTotalXp(Storage.data);
     this.preRunStageBest = (this.mode === 'tour' || this.mode === 'score_attack')
       ? (Storage.data.bestTour[L.id] || 0)
       : 0;
-    this.shake = 0; this.flash = 0; this.slowTime = 0; this.freezeTime = 0; this.magnetTime = 0; this.comboBoostTime = 0; this.hitPause = 0;
-    this.lastBallSlowmo = false;
-    this.bossDefeatedTimer = 0; this.lastTimerWarning = 0;
     this.player = new Player(W / 2, GROUND_Y);
     // Brief spawn protection so the opening seconds (often spent reading the
-    // intro banner) can never be an instant unfair death — e.g. a ball path
-    // or a big_bubbles-modified spawn crossing the player's start position.
+    // intro banner) can never be an instant unfair death.
     this.player.invuln = 1.5;
     // Preserve any already-joined co-op players across a level transition
-    // (retry, advance, boss rush step, etc.) instead of silently booting them
-    // — previously every loadLevel() call reset player2 to null, so a joined
-    // Player 2/3/4 would vanish the moment the level advanced and had to
-    // rejoin by pressing their fire key again. Respawn them fresh (full
-    // spawn invuln, harpoon weapon) at their usual slot instead.
+    // (retry, advance, boss rush step, etc.) instead of silently booting them.
     if (this.player2) { this.player2 = new Player(W / 2 + 64, GROUND_Y, 2); this.player2.invuln = 1.5; }
     if (this.player3) { this.player3 = new Player(W / 2 - 128, GROUND_Y, 3); this.player3.invuln = 1.5; }
     if (this.player4) { this.player4 = new Player(W / 2 + 128, GROUND_Y, 4); this.player4.invuln = 1.5; }
-    this.boss = L.boss ? new Boss() : null;
+    this.boss = L.boss ? createBoss(L.boss) : null;
     this.state = State.PLAYING;
+    AudioSys.setPopScale(L.theme);
+    if (this.introTimer > 0) AudioSys.sfx('stinger/level_intro_banner', 0.6);
 
     // Attach context to the CrazyGames feedback widget so any in-game user
     // reports include the moment they were in when something broke. No-op if
@@ -585,15 +704,20 @@ export class Game {
     AudioSys.pickup();
   }
 
-  respawnPlayer(player: Player) {
+  respawnPlayer(player: Player, atX?: number) {
     const spawnX: Record<number, number> = { 1: W / 2 - 64, 2: W / 2 + 64, 3: W / 2 - 128, 4: W / 2 + 128 };
-    player.x = spawnX[player.playerNum] ?? W / 2;
+    player.x = atX ?? spawnX[player.playerNum] ?? W / 2;
     player.y = GROUND_Y;
     player.vx = 0;
     player.dead = false;
+    player.deathT = -1;
     player.respawnTimer = 0;
     player.invuln = 2;
+    player.dashT = 0;
+    player.dashIframes = 0;
+    player.ghosts.length = 0;
     player.setWeapon('harpoon');
+    AudioSys.sfx('player/respawn', 0.7);
   }
 
   saveRunBest() {
@@ -621,7 +745,10 @@ export class Game {
         beatSomePB = true;
       }
       Storage.save();
-      if (this.score > (Storage.data.leaderboardPanicSubmitted || 0)) {
+      // Leaderboard integrity: a run that used a rewarded continue keeps
+      // counting for local bests, but is never submitted to the platform
+      // leaderboard (the score at the moment of the continue already was).
+      if (!this.usedRewardedContinue && this.score > (Storage.data.leaderboardPanicSubmitted || 0)) {
         const submittedScore = this.score;
         Sdk.submitLeaderboardScore(submittedScore).then(ok => {
           if (!ok) return;
@@ -653,7 +780,9 @@ export class Game {
   // Combat reactions live in src/systems/combat.ts; these methods are thin
   // delegations so existing callers (entities, collisions, state handlers)
   // keep the same `game.method(...)` surface.
-  _popBall(ball: Ball, source: any) { popBall(this, ball, source); }
+  _popBall(ball: Ball, source: PopSource) { popBall(this, ball, source); }
+  creditPop(ball: Ball, source: PopSource) { creditPop(this, ball, source, 0); }
+  breakCrate(d: Destructible) { breakCrate(this, d); }
   explodeProjectile(projectile: Projectile, x: number, y: number) { explodeProjectile(this, projectile, x, y); }
   killPlayer(player: Player, reason: DeathReason = 'unknown', chargeLife = true) { killPlayer(this, player, reason, chargeLife); }
   levelClear() { clearLevel(this); }
@@ -669,6 +798,7 @@ export class Game {
     this.t += dt;
     this.accumulator += dt;
     let steps = 0;
+    if (this.manualStep) this.accumulator = 0;
     while (this.accumulator >= this.fixedStep && steps < 5) {
       this.update(this.fixedStep);
       this.accumulator -= this.fixedStep;

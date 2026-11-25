@@ -1,6 +1,6 @@
 import { CEILING_Y, GROUND_Y, WALL_L, WALL_R } from '../constants';
 import { randomPickupType } from './ball';
-import { rand } from '../utils';
+import { grand01 } from '../systems/rng';
 import { INK } from '../rendering/theme';
 
 /**
@@ -42,7 +42,7 @@ export class Creature {
     this.kind = kind;
     this.x = x;
     this.y = y;
-    this.phase = Math.random() * Math.PI * 2;
+    this.phase = grand01() * Math.PI * 2;
     this.dead = false;
     this.popCooldown = 0;
 
