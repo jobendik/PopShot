@@ -312,8 +312,10 @@
 
 /* ---- Boss health bar (centered bottom) ---- */
 .hud__boss {
+  /* Sits in the ground strip below the floor line, so it never covers the
+     player or anything bouncing above them. */
   position: absolute;
-  bottom: clamp(36px, 5cqi, 48px);
+  bottom: clamp(3px, 0.7cqi, 7px);
   left: 50%;
   transform: translateX(-50%);
   width: min(420px, 70cqi);
@@ -321,15 +323,15 @@
 }
 .hud__boss-label {
   font-family: var(--font-display);
-  font-size: var(--fs-small);
+  font-size: var(--fs-micro);
   letter-spacing: 0.18em;
   color: var(--paper);
   text-shadow: 0 2px 0 var(--ink);
-  margin-bottom: 4px;
+  margin-bottom: 2px;
   text-transform: uppercase;
 }
 .hud__boss-bar {
-  height: 14px;
+  height: 11px;
   background: #3a0a26;
   border: 1px solid #6b0a33;
   border-radius: 4px;

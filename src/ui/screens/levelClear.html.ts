@@ -129,11 +129,13 @@ function runRewardSequence(game: Game, root: HTMLElement) {
   const rows: SeqRow[] = [
     { label: 'Base Score', prefix: '+', target: s.base },
     { label: 'Time Bonus', prefix: '+', target: s.time },
-    { label: 'Accuracy',   prefix: '+', target: s.accuracy },
-    { label: 'Combo',      prefix: '+', target: s.combo },
-    { label: 'No-Miss',    prefix: '+', target: s.noMiss },
+    { label: 'Best Chain', prefix: '+', target: s.chain },
   ];
-  if (s.tricks > 0) rows.push({ label: 'Tricks', raw: '×' + s.tricks });
+  // Only bonuses that were actually earned get a row — the card stays short
+  // on an ordinary clear and grows when the run was special.
+  if (s.style > 0)    rows.push({ label: 'Style', prefix: '+', target: s.style });
+  if (s.flawless > 0) rows.push({ label: 'Flawless', prefix: '+', target: s.flawless });
+  if (s.perfect > 0)  rows.push({ label: 'PERFECT CHAIN', prefix: '+', target: s.perfect, cls: 'ui-stat-row__value--win' });
   rows.push({ label: 'Total', prefix: '', target: s.total, cls: 'ui-stat-row__value--win', big: true });
   if (s.best > 0) rows.push({ label: 'Best', raw: s.best.toLocaleString(), cls: 'ui-stat-row__value--best' });
   if (s.newComboBest) rows.push({ label: 'NEW COMBO BEST', raw: '!', cls: 'ui-stat-row__value--win' });

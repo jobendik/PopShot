@@ -108,6 +108,13 @@ class UIRoot {
   syncFrame(game: Game) {
     if (!this.container) return;
 
+    // World ambience follows the arena theme while a stage is on screen, and
+    // the adaptive music tempo is only ever applied during live play.
+    const st = game.state;
+    const inStage = st === State.PLAYING || st === State.PLAYER_DEAD || st === State.BOSS_DEFEATED || st === State.LEVEL_CLEAR;
+    AudioSys.ambient(inStage ? game.theme : '');
+    if (st !== State.PLAYING) { AudioSys.setMusicRate(1); AudioSys.setMusicVolume(1); }
+
     if (game.state !== this.lastState) {
       document.body.dataset.state = game.state;
       AudioSys.syncMusicForState(game.state);

@@ -15,7 +15,7 @@
  *     update when there's no boss or P2 in play).
  */
 
-import { State, type GameState } from '../../constants';
+import { State, WEAPON_LABEL, chainMult, type GameState } from '../../constants';
 import { AudioSys } from '../../systems/audio';
 import { LEVELS } from '../../data/levels';
 import type { Game } from '../../game';
@@ -41,6 +41,7 @@ interface Refs {
   combo: HTMLElement;
   comboRing: SVGCircleElement;    // foreground ring whose stroke-dashoffset = combo time remaining
   comboValue: HTMLElement;        // the "×N" text portion of the combo chip
+  comboLabel: HTMLElement;
   lives: HTMLElement;
   levelName: HTMLElement;
   pauseBtn: HTMLElement;
@@ -109,7 +110,7 @@ export function buildHUD(game: Game): HTMLElement {
             </svg>
           </div>
           <div class="hud__combo-info">
-            <div class="hud__combo-label">COMBO</div>
+            <div class="hud__combo-label" data-role="combo-label">CHAIN</div>
             <div class="hud__combo-value" data-role="combo-value">×0</div>
           </div>
         </div>
@@ -145,6 +146,7 @@ export function buildHUD(game: Game): HTMLElement {
     combo:        root.querySelector('[data-role="combo"]') as HTMLElement,
     comboRing:    root.querySelector('[data-role="combo-ring"]') as unknown as SVGCircleElement,
     comboValue:   root.querySelector('[data-role="combo-value"]') as HTMLElement,
+    comboLabel:   root.querySelector('[data-role="combo-label"]') as HTMLElement,
     lives:        root.querySelector('[data-role="lives"]') as HTMLElement,
     levelName:    root.querySelector('[data-role="level-name"]') as HTMLElement,
     pauseBtn:     root.querySelector('[data-role="pause-btn"]') as HTMLElement,
@@ -191,7 +193,7 @@ export function syncHUD(game: Game) {
   // ---- Weapon / ammo / shield ----
   const p = game.player;
   if (p) {
-    const wName = p.weapon.toUpperCase();
+    const wName = WEAPON_LABEL[p.weapon] || p.weapon.toUpperCase();
     if (wName !== cached.weapon) {
       refs.weaponName.textContent = wName;
       refs.weaponName.classList.toggle('is-default', p.weapon === 'harpoon');
@@ -247,16 +249,19 @@ export function syncHUD(game: Game) {
   if (game.combo !== cached.combo) {
     if (game.combo > 1) {
       refs.combo.classList.add('is-visible');
-      refs.comboValue.textContent = '×' + game.combo;
-      refs.combo.classList.toggle('is-mid', game.combo >= 5 && game.combo < 10);
-      refs.combo.classList.toggle('is-hot', game.combo >= 10);
+      // The chip leads with the thing that pays: the score multiplier. The
+      // chain length sits in the label above it.
+      refs.comboValue.textContent = '×' + chainMult(game.combo).toFixed(1);
+      refs.comboLabel.textContent = 'CHAIN ' + game.combo;
+      refs.combo.classList.toggle('is-mid', game.combo >= 5 && game.combo < 15);
+      refs.combo.classList.toggle('is-hot', game.combo >= 15);
     } else {
       refs.combo.classList.remove('is-visible');
     }
     cached.combo = game.combo;
   }
   if (game.combo > 1) {
-    const ratio = Math.max(0, Math.min(1, game.comboDecay / 4));
+    const ratio = Math.max(0, Math.min(1, game.comboDecay / (game.comboWindow || 3)));
     const offset = (100 - ratio * 100).toFixed(1);
     if (refs.comboRing.getAttribute('stroke-dashoffset') !== offset) {
       refs.comboRing.setAttribute('stroke-dashoffset', offset);
@@ -285,10 +290,11 @@ export function syncHUD(game: Game) {
   }
 
   // ---- Boss bar ----
-  const bossVisible = !!game.boss && !game.boss.dead;
+  const bossVisible = !!game.boss && !game.boss.dead && game.boss.introT <= 0.6;
   if (bossVisible !== cached.bossVisible) {
     refs.bossWrap.hidden = !bossVisible;
     cached.bossVisible = bossVisible;
+    if (bossVisible && game.boss) refs.bossLabel.textContent = game.boss.name;
   }
   if (bossVisible && game.boss) {
     const ratio = game.boss.hp / game.boss.maxHp;

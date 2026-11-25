@@ -20,20 +20,25 @@ export function advanceFromLevelClear(game: Game): void {
       const nextBossIndex = game.bossRushQueue.shift();
       if (nextBossIndex == null) {
         game.saveRunBest();
+        AudioSys.sfx('stinger/victory', 0.95);
         game.state = State.VICTORY;
         return;
       }
+      // The rush rewards momentum: every boss down restores one life (max 3).
+      game.lives = Math.min(3, game.lives + 1);
       game.loadLevel(nextBossIndex);
-      game.introTitle = 'BOSS ' + (game.bossRushCount + 1);
-      game.introText = 'Defeat every boss in sequence.';
+      game.introTitle = 'BOSS ' + (game.bossRushCount + 1) + ' OF ' + (game.bossRushCount + 1 + game.bossRushQueue.length);
+      game.introText = LEVELS[nextBossIndex].name + '\n+1 life for the last one. Keep going.';
       game.introTimer = 3;
       return;
     }
+  }
+  const next = game.levelIndex + 1;
+  if (next >= LEVELS.length && game.mode !== 'score_attack') {
+    AudioSys.sfx('stinger/victory', 0.95);
     game.state = State.VICTORY;
     return;
   }
-  const next = game.levelIndex + 1;
-  if (next >= LEVELS.length) { game.state = State.VICTORY; return; }
   const targetIndex = game.mode === 'score_attack' ? (next % LEVELS.length) : next;
 
   // CrazyGames hygiene: midgame ad between Tour levels — but never before
@@ -74,9 +79,9 @@ export function renderLevelClear(game: Game) {
     const rows: [string, string][] = [
       ['Base Score', '+' + s.base],
       ['Time Bonus', '+' + s.time],
-      ['Accuracy Bonus', '+' + s.accuracy],
-      ['Combo Bonus', '+' + s.combo],
-      ['No-Miss Bonus', '+' + s.noMiss],
+      ['Chain Bonus', '+' + s.chain],
+      ['Style Bonus', '+' + s.style],
+      ['Flawless Bonus', '+' + s.flawless],
     ];
     if (s.tricks > 0) rows.push(['Tricks', '×' + s.tricks]);
     // Compress row spacing when the optional tricks row is present so the

@@ -78,10 +78,15 @@ export const TITLES: Title[] = [
   { id: 'arctic_master', label: 'Arctic Master',   earned: () => allGoldInTheme('arctic') },
   { id: 'desert_master', label: 'Desert Master',   earned: () => allGoldInTheme('desert') },
   { id: 'beach_master',  label: 'Beach Master',    earned: () => allGoldInTheme('beach') },
-  { id: 'wave_rider',    label: 'Wave Rider',      earned: () => (Storage.data.bestPanicWave || 0) >= 10 },
+  { id: 'perfectionist', label: 'Perfectionist',   earned: () => (Storage.data.perfectChains || 0) >= 5 },
+  { id: 'phase_walker',  label: 'Phase Walker',    earned: () => (Storage.data.trickStats?.phase || 0) >= 15 },
+  { id: 'apex_hunter',   label: 'Apex Hunter',     earned: () => (Storage.data.trickStats?.apex || 0) >= 20 },
+  // Titles earned under the previous scoring model stay earned: the checks
+  // also honour the archived "classic" bests.
+  { id: 'wave_rider',    label: 'Wave Rider',      earned: () => Math.max(Storage.data.bestPanicWave || 0, Storage.data.legacy?.panicWave || 0) >= 10 },
   { id: 'trickster',     label: 'Trickster',       earned: () => (Storage.data.lifetimeTricks || 0) >= 25 },
   { id: 'combo_crusher', label: 'Combo Crusher',   earned: () => (Storage.data.lifetimeMaxCombo || 0) >= 20 },
-  { id: 'score_hunter',  label: 'Score Hunter',    earned: () => (Storage.data.bestScoreAttack || 0) >= 20000 },
+  { id: 'score_hunter',  label: 'Score Hunter',    earned: () => (Storage.data.bestScoreAttack || 0) >= 60000 || (Storage.data.legacy?.scoreAttack || 0) >= 20000 },
   { id: 'streak_starter',label: 'Streak Starter',  earned: () => (Storage.data.dailyStreak || 0) >= 3 },
   { id: 'bubble_buster', label: 'Bubble Buster',   earned: () => (Storage.data.unlockedLevel || 0) >= 1 },
 ];
@@ -142,6 +147,8 @@ export const TRICK_CONTRACTS: TrickContract[] = [
   { id: 'air_pop',    label: 'Air Pops',    title: 'Air Artist',    target: 20, rewardTitleId: 'air_artist' },
   { id: 'close_call', label: 'Close Calls', title: 'Danger Dancer', target: 20, rewardTitleId: 'danger_dancer' },
   { id: 'clutch',     label: 'Clutches',    title: 'Clutch Hero',   target: 3,  rewardTitleId: 'clutch_hero' },
+  { id: 'phase',      label: 'Phase Dashes', title: 'Phase Walker', target: 15, rewardTitleId: 'phase_walker' },
+  { id: 'apex',       label: 'Apex Shots',  title: 'Apex Hunter',   target: 20, rewardTitleId: 'apex_hunter' },
 ];
 
 export function recordTrick(id: string): { count: number; contract?: TrickContract; completedNow: boolean } {

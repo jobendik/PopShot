@@ -10,8 +10,12 @@ export class Crab {
   minX: number;
   maxX: number;
   dead: boolean;
+  /** Beat between pops, so a crab under a split helps instead of vacuuming
+   *  the whole family the frame its children spawn. */
+  popCooldown: number;
 
   constructor(x: number, y = GROUND_Y, minX = WALL_L + 30, maxX = WALL_R - 30, speed = 72) {
+    this.popCooldown = 0;
     this.x = x;
     this.y = y;
     this.w = 34;
@@ -27,6 +31,7 @@ export class Crab {
   }
 
   update(dt: number) {
+    if (this.popCooldown > 0) this.popCooldown -= dt;
     this.x += this.vx * dt;
     if (this.x < this.minX) { this.x = this.minX; this.vx = Math.abs(this.vx); }
     if (this.x > this.maxX) { this.x = this.maxX; this.vx = -Math.abs(this.vx); }

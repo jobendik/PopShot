@@ -1,9 +1,23 @@
+import { remapLegacyLevelIndex } from '../data/levels';
 import { Platform as Sdk } from './platform';
 
 export type MedalTier = 0 | 1 | 2 | 3;     // 0 = none, 1 = bronze, 2 = silver, 3 = gold
 
+/** Personal bests recorded under the previous scoring model (medalScale 2).
+ *  They cannot be compared with current scores, so they are kept here —
+ *  shown as "Classic" records and still honoured by title unlocks — instead
+ *  of being silently overwritten or pretending to be the same scale. */
+export interface LegacyBests {
+  scoreAttack: number;
+  panicWave: number;
+  panicScore: number;
+  bossRush: number;
+  bossRushCount: number;
+}
+
 export interface SaveData {
-  schemaVersion: 2;
+  /** 3 = the 27-stage Tour (two boss stages inserted; unlockedLevel remapped). */
+  schemaVersion: 3;
   bestTour: Record<string, number>;
   bestScoreAttack: number;
   bestPanicWave: number;
@@ -63,10 +77,23 @@ export interface SaveData {
   mobileHaptics: boolean;
   /** Mobile-only: one-time-seen flag for the first-play touch overlay. */
   mobileOnboardingSeen: boolean;
-  /** Medal-scoring generation. Generation 2 switched Tour medals from
-   *  cumulative-run scores to per-level scores; bests/medals recorded under
-   *  the old scale are incomparable and get reset once on upgrade. */
+  /** Scoring generation.
+   *   2 — Tour medals moved from cumulative-run to per-level scores.
+   *   3 — time-based chains, tiered multipliers and new clear bonuses.
+   *  Scores from an older generation are not comparable: on upgrade the
+   *  per-level best SCORES are cleared (so new runs can register), earned
+   *  MEDAL TIERS are kept (an achievement stays achieved), and mode bests
+   *  move to `legacy`. */
   medalScale: number;
+  /** Mode bests from the previous scoring generation (see LegacyBests). */
+  legacy: LegacyBests;
+  /** Stages cleared in one unbroken chain — drives the Perfectionist title. */
+  perfectChains: number;
+  /** One-time contextual tips already shown (id → true). */
+  tips: Record<string, boolean>;
+  /** Touch: double-tap a side to dash. On by default; can be switched off
+   *  by players who find it fires by accident. */
+  mobileDoubleTapDash: boolean;
 }
 
 const KEY_V1 = 'bba_save_v1';
@@ -75,7 +102,7 @@ const KEY_V2 = 'popshot_save_v2';
 
 function createDefaultSave(): SaveData {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     bestTour: {},
     bestScoreAttack: 0,
     bestPanicWave: 0,
@@ -111,8 +138,52 @@ function createDefaultSave(): SaveData {
     mobileTouchScale: 1,
     mobileHaptics: true,
     mobileOnboardingSeen: false,
-    medalScale: 2,
+    medalScale: 3,
+    legacy: { scoreAttack: 0, panicWave: 0, panicScore: 0, bossRush: 0, bossRushCount: 0 },
+    perfectChains: 0,
+    tips: {},
+    mobileDoubleTapDash: true,
   };
+}
+
+/**
+ * Bring a raw snapshot (local OR cloud) up to the current schema. Pure: it
+ * returns a new object and never touches storage, so the same function is
+ * applied to a stale cloud copy before it is merged — a v2 cloud save can
+ * therefore never drag index-based or old-scale values into a v3 save.
+ */
+export function upgradeSnapshot(raw: any): any {
+  if (!raw || typeof raw !== 'object') return raw;
+  const out = { ...raw };
+  // v2 → v3: two boss stages were inserted into the Tour.
+  if ((out.schemaVersion ?? 2) < 3) {
+    if (typeof out.unlockedLevel === 'number') out.unlockedLevel = remapLegacyLevelIndex(out.unlockedLevel);
+    out.schemaVersion = 3;
+  }
+  const scale = out.medalScale ?? 0;
+  if (scale < 3) {
+    const prev: Partial<LegacyBests> = out.legacy || {};
+    out.legacy = {
+      scoreAttack:   Math.max(prev.scoreAttack || 0,   out.bestScoreAttack || 0),
+      panicWave:     Math.max(prev.panicWave || 0,     out.bestPanicWave || 0),
+      panicScore:    Math.max(prev.panicScore || 0,    out.bestPanicScore || 0),
+      bossRush:      Math.max(prev.bossRush || 0,      out.bestBossRush || 0),
+      bossRushCount: Math.max(prev.bossRushCount || 0, out.bestBossRushCount || 0),
+    };
+    out.bestScoreAttack = 0;
+    out.bestPanicWave = 0;
+    out.bestPanicScore = 0;
+    out.bestBossRush = 0;
+    out.bestBossRushCount = 0;
+    out.leaderboardPanicSubmitted = 0;
+    out.weeklyPanicBest = {};
+    out.bestTour = {};
+    // Medals from generation 2 are grandfathered. Anything older was judged
+    // on cumulative run scores and never meant the same thing — drop those.
+    if (scale < 2) out.medals = {};
+    out.medalScale = 3;
+  }
+  return out;
 }
 
 function migrateFromV1(raw: string): SaveData {
@@ -193,7 +264,7 @@ function mergeProgress(local: SaveData, cloud: Partial<SaveData>): SaveData {
   // Per-level bests: keep the max for each entry; union of keys. Cloud saves
   // from the cumulative-medal era (medalScale < 2) are skipped — their
   // bestTour/medal values are on an incomparable scale (see load()).
-  const cloudMedalsComparable = (cloud.medalScale ?? 0) >= 2;
+  const cloudMedalsComparable = (cloud.medalScale ?? 0) >= 3;
   if (cloud.bestTour && cloudMedalsComparable) {
     const merged = { ...local.bestTour };
     for (const k in cloud.bestTour) merged[k] = Math.max(merged[k] || 0, cloud.bestTour[k]);
@@ -218,6 +289,19 @@ function mergeProgress(local: SaveData, cloud: Partial<SaveData>): SaveData {
     for (const k in cloud.trickStats) merged[k] = Math.max(merged[k] || 0, cloud.trickStats[k] || 0);
     out.trickStats = merged;
   }
+  if (cloud.legacy) {
+    const l = local.legacy || { scoreAttack: 0, panicWave: 0, panicScore: 0, bossRush: 0, bossRushCount: 0 };
+    const c = cloud.legacy;
+    out.legacy = {
+      scoreAttack:   Math.max(l.scoreAttack || 0,   c.scoreAttack || 0),
+      panicWave:     Math.max(l.panicWave || 0,     c.panicWave || 0),
+      panicScore:    Math.max(l.panicScore || 0,    c.panicScore || 0),
+      bossRush:      Math.max(l.bossRush || 0,      c.bossRush || 0),
+      bossRushCount: Math.max(l.bossRushCount || 0, c.bossRushCount || 0),
+    };
+  }
+  if (cloud.perfectChains != null) out.perfectChains = Math.max(local.perfectChains || 0, cloud.perfectChains || 0);
+  if (cloud.tips) out.tips = { ...(local.tips || {}), ...cloud.tips };
   // Sticky one-time flags: if either side has fired the celebration, keep it.
   if (cloud.firstPopCelebrated) out.firstPopCelebrated = true;
   if (typeof cloud.equippedTitleId === 'string') out.equippedTitleId = cloud.equippedTitleId;
@@ -265,7 +349,9 @@ export const Storage: {
       const rawV2 = localStorage.getItem(KEY_V2);
       if (rawV2) {
         const parsed = JSON.parse(rawV2);
-        this.data = { ...createDefaultSave(), ...(parsed || {}) };
+        const upgraded = upgradeSnapshot(parsed || {});
+        const needsWrite = (parsed?.schemaVersion ?? 2) < 3 || (parsed?.medalScale ?? 0) < 3;
+        this.data = { ...createDefaultSave(), ...upgraded };
         // Defensive: nested objects need to be present even after partial saves.
         if (!this.data.bestTour)  this.data.bestTour  = {};
         if (!this.data.medals)    this.data.medals    = {};
@@ -286,21 +372,17 @@ export const Storage: {
         if (typeof this.data.mobileTouchScale !== 'number' || !isFinite(this.data.mobileTouchScale)) this.data.mobileTouchScale = 1;
         if (typeof this.data.mobileHaptics !== 'boolean') this.data.mobileHaptics = true;
         if (typeof this.data.mobileOnboardingSeen !== 'boolean') this.data.mobileOnboardingSeen = false;
-        // Medal recalibration: saves written before the per-level scoring
-        // change hold cumulative-run bests that would read as instant golds
-        // against the new per-level targets. Reset them once; level unlocks
-        // and every other stat are untouched.
-        if ((parsed?.medalScale ?? 0) < 2) {
-          this.data.bestTour = {};
-          this.data.medals = {};
-          this.data.medalScale = 2;
-          this.save();
-        }
+        if (!this.data.legacy) this.data.legacy = createDefaultSave().legacy;
+        if (!this.data.tips) this.data.tips = {};
+        if (typeof this.data.perfectChains !== 'number') this.data.perfectChains = 0;
+        if (typeof this.data.mobileDoubleTapDash !== 'boolean') this.data.mobileDoubleTapDash = true;
+        // Persist a schema/scoring upgrade immediately so it runs exactly once.
+        if (needsWrite) this.save();
         return this.data;
       }
       const rawV1 = localStorage.getItem(KEY_V1);
       if (rawV1) {
-        this.data = migrateFromV1(rawV1);
+        this.data = { ...createDefaultSave(), ...upgradeSnapshot({ ...migrateFromV1(rawV1), schemaVersion: 2, medalScale: 0 }) };
         // Persist immediately so v1 readers don't run forever.
         this.save();
         return this.data;
@@ -323,7 +405,7 @@ export const Storage: {
     try {
       const raw = await Sdk.load(KEY_V2);
       if (!raw) return { merged: false };
-      const cloud = JSON.parse(raw) as Partial<SaveData>;
+      const cloud = upgradeSnapshot(JSON.parse(raw)) as Partial<SaveData>;
       const before = JSON.stringify(this.data);
       this.data = mergeProgress(this.data, cloud);
       const after = JSON.stringify(this.data);

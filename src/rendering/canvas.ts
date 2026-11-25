@@ -582,9 +582,16 @@ function drawMidLayer(ctx: CanvasRenderingContext2D, theme: ThemeName, t: number
       ctx.fillRect(px, GROUND_Y - 26, 80, 6);
     }
   } else if (theme === 'airship') {
-    // Main airship — central, larger, with rigging detail.
+    // Escort airship — pushed back into the distance (smaller, higher, hazed
+    // by atmospheric perspective, slowly drifting). At full size and contrast
+    // in the middle of the arena it read as a solid platform.
     const ax = W / 2;
     const ay = GROUND_Y - 120;
+    ctx.save();
+    ctx.translate(W / 2 + Math.sin(t * 0.07) * 70, 214 + Math.sin(t * 0.4) * 4);
+    ctx.scale(0.6, 0.6);
+    ctx.translate(-ax, -ay);
+    ctx.globalAlpha = 0.5;
     // Balloon body
     const bg = ctx.createLinearGradient(0, ay - 52, 0, ay + 52);
     bg.addColorStop(0, '#8d7460');
@@ -625,6 +632,7 @@ function drawMidLayer(ctx: CanvasRenderingContext2D, theme: ThemeName, t: number
     for (let i = 0; i < 5; i++) {
       ctx.fillRect(ax - 70 + i * 32, ay + 42, 14, 12);
     }
+    ctx.restore();
   } else if (theme === 'boss') {
     // Energy spirals — two counter-rotating arcs across the upper sky.
     for (let arm = 0; arm < 2; arm++) {

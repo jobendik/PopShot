@@ -1,14 +1,27 @@
 import { BALL_BOUNCE, BALL_COLORS, BALL_HSPEED, BALL_RADIUS, CEILING_Y, GROUND_Y, GRAVITY, HEX_BOUNCE_MULT, HEX_HSPEED_MULT, WALL_L, WALL_R, type BallType, type PickupType } from '../constants';
 import { AudioSys } from '../systems/audio';
-import { clamp, collideCircleRect, rand, randi, sweepHitsRect } from '../utils';
+import { gchance, gpick, grand, grand01 } from '../systems/rng';
+import { clamp, collideCircleRect, rand, sweepHitsRect } from '../utils';
 import { Hazard } from './hazard';
 import { Particle, Shockwave, SmokeCloud } from './particle';
 import { Pickup } from './pickup';
 import { INK, displayFont } from '../rendering/theme';
 import type { Game } from '../game';
 
+/** Blast radius of an explosive ball by size tier. The lethal zone for the
+ *  player is a smaller core (BLAST_LETHAL of this) — see detonate(). */
+export const BLAST_RADIUS = [78, 96, 114, 132, 150];
+export const BLAST_LETHAL = 0.58;
+/** How far an electric pop can arc to a neighbour. */
+export const ARC_RANGE = 165;
+/** How strongly each size tier is shoved by wind (small = light). */
+const WIND_FACTOR = [1.35, 1.15, 1.0, 0.85, 0.7];
+
+let nextBallId = 1;
+
 // ============================ BALL ==================================
 export class Ball {
+  id: number;
   x: number;
   y: number;
   size: number;
@@ -23,6 +36,8 @@ export class Ball {
   electricCharge: number;
   smokeTimer: number;
   squashTime: number;            // remaining seconds of squash-and-stretch after floor bounce
+  /** Remaining seconds of the sideways squash after a wall / bumper hit. */
+  wallSquash: number;
   /** Panic-mode "time-stop micro-ball" marker. In Pang's Panic Mode, exactly
    *  one tiny child in each large balloon's family tree is flagged: popping it
    *  freezes all balls for ~2 seconds. We mirror this by tagging a child
@@ -49,23 +64,53 @@ export class Ball {
    *  trick checks `age - lastWallTime < ~0.35`. Negative initial value means
    *  "never bounced yet." */
   lastWallTime: number;
+  /** Transient sideways drift from wind gusts and bumper kicks. Kept separate
+   *  from `vx` so a ball's learnable base arc survives: the drift decays back
+   *  to zero and the ball returns to its normal rhythm. */
+  driftVx: number;
+  /** Per-ball graze cooldown (seconds) so one near miss scores exactly once. */
+  grazeCd: number;
+  /** Set by a PopShot. A cascading ball's children inherit the flag and
+   *  auto-pop on a short stagger, so the whole family tree bursts in a ripple. */
+  cascade: boolean;
+  /** Delayed auto-pop timer (cascade ripple / electric arc). <0 = inactive. */
+  popFuse: number;
+  /** What lit popFuse — forwarded to popBall as the pop source. */
+  popFuseKind: 'cascade' | 'arc' | '';
+  /** Seconds during which this ball cannot be chosen as an arc target. Fresh
+   *  children are briefly grounded so a single spark can't ping-pong through
+   *  one family forever. */
+  arcImmune: number;
+  /** Spawn pop-in animation clock (counts down). */
+  bornT: number;
+  /** White flash clock after a non-lethal hit (armor crack, fuse lit). */
+  hitFlash: number;
+  /** Bounce modifier visual: >0 superheated by a lava patch, <0 slimed. */
+  surfaceFx: number;
+  /** Last bumper that kicked this ball + cooldown, so a ball resting against a
+   *  bumper is kicked once, not every frame. */
+  bumperCd: number;
+  /** Held in a boss tractor beam: physics is suspended, the boss moves it. */
+  held: boolean;
   constructor(x, y, size, type: BallType = 'normal', vx = 0, vy = 0) {
+    this.id = nextBallId++;
     this.x = x; this.y = y;
     this.size = size;
     this.r = BALL_RADIUS[size];
     this.type = type;
     // Hexagons travel a touch faster as a baseline; preserves the Super Pang feel.
     const hspeed = BALL_HSPEED[size] * (type === 'hexagon' ? HEX_HSPEED_MULT : 1);
-    this.vx = vx || (Math.random() < 0.5 ? -1 : 1) * hspeed;
+    this.vx = vx || (grand01() < 0.5 ? -1 : 1) * hspeed;
     this.vy = vy;
     this.dead = false;
     this.spin = 0;
     // Type-specific state
     this.armorHits = (type === 'armored') ? 1 : 0;  // remaining armor
     this.fuse = 0;                                   // explosive fuse
-    this.electricCharge = rand(1.5, 3);              // electric ball discharge timer
+    this.electricCharge = grand(2.2, 3.6);           // electric ball discharge timer
     this.smokeTimer = 0;                             // smoke ball periodic puffs
     this.squashTime = 0;
+    this.wallSquash = 0;
     this.flashing = false;
     this.star = (type === 'star');
     this.starMode = 0;
@@ -73,6 +118,17 @@ export class Ball {
     this.floorBounces = 0;
     this.age = 0;
     this.lastWallTime = -10;
+    this.driftVx = 0;
+    this.grazeCd = 0;
+    this.cascade = false;
+    this.popFuse = -1;
+    this.popFuseKind = '';
+    this.arcImmune = 0;
+    this.bornT = 0;
+    this.hitFlash = 0;
+    this.surfaceFx = 0;
+    this.bumperCd = 0;
+    this.held = false;
   }
 
   /** Mark for split. Children inherit position, opposite horizontal velocities.
@@ -85,16 +141,27 @@ export class Ball {
     if (this.size === 0) return [];
     const childSize = this.size - 1;
     const childSpeed = BALL_HSPEED[childSize] * (this.type === 'hexagon' ? HEX_HSPEED_MULT : 1);
-    const childBounce = BALL_BOUNCE[childSize] * (this.type === 'hexagon' ? HEX_BOUNCE_MULT : 1) * 0.65;
+    const g = Math.sqrt(game?.gravityScale ?? 1);
+    const childBounce = BALL_BOUNCE[childSize] * (this.type === 'hexagon' ? HEX_BOUNCE_MULT : 1) * 0.65 * g;
     const children: Ball[] = [];
     for (let i = 0; i < 2; i++) {
       const dir = i === 0 ? -1 : 1;
       const child = new Ball(
-        this.x, this.y - 8,
+        this.x + dir * this.r * 0.25, this.y - 8,
         childSize, this.type,
         dir * childSpeed,
-        -childBounce
+        -childBounce * (this.cascade ? 1.15 : 1)
       );
+      child.bornT = 0.16;
+      child.arcImmune = 0.55;
+      child.driftVx = this.driftVx * 0.5;
+      if (this.cascade) {
+        // Ripple: each generation pops a beat after the last, the two
+        // siblings a hair apart so the notes of the cascade never coincide.
+        child.cascade = true;
+        child.popFuse = 0.13 + i * 0.045;
+        child.popFuseKind = 'cascade';
+      }
       children.push(child);
     }
     if (this.flashing || (game && game.mode === 'panic')) {
@@ -107,15 +174,40 @@ export class Ball {
     return children;
   }
 
-  update(dt, game) {
+  /** Clocks that must keep running even while the world is frozen (Freeze
+   *  pickup, Clock bubble): cascade ripples and arc pops are player rewards
+   *  and should never be swallowed by a time-stop. */
+  tickFuses(dt: number, game: Game) {
+    if (this.dead) return;
+    if (this.grazeCd > 0) this.grazeCd -= dt;
+    if (this.arcImmune > 0) this.arcImmune -= dt;
+    if (this.bornT > 0) this.bornT = Math.max(0, this.bornT - dt);
+    if (this.hitFlash > 0) this.hitFlash = Math.max(0, this.hitFlash - dt);
+    if (this.bumperCd > 0) this.bumperCd -= dt;
+    if (this.popFuse >= 0) {
+      this.popFuse -= dt;
+      if (this.popFuse < 0) {
+        const kind = this.popFuseKind || 'cascade';
+        this.popFuseKind = '';
+        game._popBall(this, { kind });
+      }
+    }
+    if (this.type === 'explosive' && this.fuse > 0) {
+      this.fuse -= dt;
+      if (this.fuse <= 0) this.detonate(game);
+    }
+  }
+
+  update(dt, game: Game) {
+    if (dt <= 0) return;
     // Type-specific behaviour
     if (this.type === 'electric') {
       this.electricCharge -= dt;
       if (this.electricCharge <= 0) {
         // Discharge: spawn a brief downward electric beam hazard
-        game.hazards.push(new Hazard('electric_beam', this.x - 6, this.y, 12, GROUND_Y - this.y, 0.6));
-        AudioSys.warning();
-        this.electricCharge = rand(2.5, 4);
+        game.hazards.push(new Hazard('electric_beam', this.x - 6, this.y, 12, GROUND_Y - this.y, 0.5));
+        AudioSys.sfx('hazard/electric_beam', 0.5);
+        this.electricCharge = grand(3.0, 4.6);
       }
     }
     if (this.type === 'smoke') {
@@ -124,10 +216,6 @@ export class Ball {
         game.smokeClouds.push(new SmokeCloud(this.x + rand(-12, 12), this.y + rand(-8, 8), rand(26, 44), 2.8));
         this.smokeTimer = 0.45;
       }
-    }
-    if (this.type === 'explosive' && this.fuse > 0) {
-      this.fuse -= dt;
-      if (this.fuse <= 0) this.detonate(game);
     }
     if (this.type === 'star' || this.star) {
       // Cycle between Clock (mode 0, ~freeze) and Star (mode 1, ~clear).
@@ -142,43 +230,84 @@ export class Ball {
       }
     }
 
+    if (this.held) { this.age += dt; return; }
+
+    // ---- Environment forces ----
+    const gScale = game.gravityScale;
+    const gRoot = Math.sqrt(gScale);
+    let gravity = GRAVITY * gScale;
+    // Wind: accelerates the transient drift, never the base arc.
+    const windAx = game.wind.ax;
+    if (windAx !== 0) {
+      this.driftVx += windAx * WIND_FACTOR[this.size] * dt;
+      this.driftVx = clamp(this.driftVx, -190, 190);
+    } else if (this.driftVx !== 0) {
+      this.driftVx *= Math.max(0, 1 - 1.6 * dt);
+      if (Math.abs(this.driftVx) < 2) this.driftVx = 0;
+    }
+    // Updraft fans: a running fan lifts any ball in its column.
+    for (const f of game.fans) {
+      if (f.power <= 0.05) continue;
+      if (this.x > f.x && this.x < f.x + f.w && this.y > f.top) {
+        gravity -= f.lift * f.power * WIND_FACTOR[this.size];
+        this.surfaceFx = 0;
+      }
+    }
+
     // Physics
     const prevY = this.y;
-    this.vy += GRAVITY * dt;
-    this.x += this.vx * dt;
+    this.vy += gravity * dt;
+    if (this.vy < -720) this.vy = -720;       // fan/bumper safety cap
+    this.x += (this.vx + this.driftVx) * dt;
     this.y += this.vy * dt;
-    this.spin += this.vx * dt * 0.02;
+    this.spin += (this.vx + this.driftVx) * dt * 0.02;
     this.age += dt;
     if (this.squashTime > 0) this.squashTime = Math.max(0, this.squashTime - dt);
+    if (this.wallSquash > 0) this.wallSquash = Math.max(0, this.wallSquash - dt);
+    if (this.surfaceFx !== 0) {
+      this.surfaceFx += (this.surfaceFx > 0 ? -1 : 1) * dt * 1.4;
+      if (Math.abs(this.surfaceFx) < 0.03) this.surfaceFx = 0;
+    }
 
     // Floor: arcade-consistent bounce (constant peak height). Hexagon balls
     // get a slight bounce-height boost AND a small horizontal-velocity jitter
     // on each bounce, so their trajectory feels jagged rather than smooth.
     if (this.y + this.r >= GROUND_Y) {
       this.y = GROUND_Y - this.r;
-      const bounceMult = this.type === 'hexagon' ? HEX_BOUNCE_MULT : 1;
+      let bounceMult = (this.type === 'hexagon' ? HEX_BOUNCE_MULT : 1) * gRoot;
+      // Reactive floor: the patches balls leave behind change how the NEXT
+      // ball bounces there. Lava superheats (higher, floatier arc); slime is
+      // sticky (a low, fast, dangerous hop). Both are visible on the floor
+      // before the ball lands, so the altered arc is readable in advance.
+      const patch = floorPatchAt(game, this.x);
+      if (patch === 'lava') { bounceMult *= 1.2; this.surfaceFx = 1; }
+      else if (patch === 'slime') { bounceMult *= 0.74; this.surfaceFx = -1; }
       this.vy = -BALL_BOUNCE[this.size] * bounceMult;
       if (this.type === 'hexagon') {
         // Tiny direction jitter — never enough to flip sign, just enough to
         // disrupt clean prediction. Caps protect us from runaway speeds.
-        this.vx *= (1 + rand(-0.06, 0.06));
+        this.vx *= (1 + grand(-0.06, 0.06));
+        const cap = BALL_HSPEED[this.size] * HEX_HSPEED_MULT * 1.3;
+        this.vx = clamp(this.vx, -cap, cap);
       }
       this.squashTime = 0.18;
       this.floorBounces++;
       AudioSys.bounce(this.size);
       // Lava ball drips on bounce
-      if (this.type === 'lava' && Math.random() < 0.6) {
+      if (this.type === 'lava' && gchance(0.6)) {
         game.hazards.push(new Hazard('lava', this.x - 18, GROUND_Y - 4, 36, 8, 3.5));
+        AudioSys.sfx('hazard/lava_drop', 0.35);
       }
       // Sludge drops slime
-      if (this.type === 'sludge' && Math.random() < 0.5) {
+      if (this.type === 'sludge' && gchance(0.5)) {
         game.hazards.push(new Hazard('slime', this.x - 22, GROUND_Y - 4, 44, 8, 4));
+        AudioSys.sfx('hazard/slime_drop', 0.35);
       }
     }
 
     // Walls
-    if (this.x - this.r <= WALL_L) { this.x = WALL_L + this.r; this.vx = Math.abs(this.vx); this.lastWallTime = this.age; }
-    else if (this.x + this.r >= WALL_R) { this.x = WALL_R - this.r; this.vx = -Math.abs(this.vx); this.lastWallTime = this.age; }
+    if (this.x - this.r <= WALL_L) { this.x = WALL_L + this.r; this.vx = Math.abs(this.vx); this.driftVx = Math.abs(this.driftVx) * 0.5; this.onWall(); }
+    else if (this.x + this.r >= WALL_R) { this.x = WALL_R - this.r; this.vx = -Math.abs(this.vx); this.driftVx = -Math.abs(this.driftVx) * 0.5; this.onWall(); }
 
     // Ceiling
     if (this.y - this.r <= CEILING_Y) {
@@ -194,10 +323,11 @@ export class Ball {
         this.y += c.ny * c.depth;
         if (Math.abs(c.ny) > Math.abs(c.nx)) {
           // Vertical collision: arcade bounce
-          if (c.ny < 0) { this.vy = -BALL_BOUNCE[this.size]; }
+          if (c.ny < 0) { this.vy = -BALL_BOUNCE[this.size] * gRoot; this.squashTime = 0.14; AudioSys.bounceSoft('platform'); }
           else          { this.vy = Math.abs(this.vy) * 0.7; }
         } else {
           this.vx = c.nx * Math.abs(this.vx);
+          this.wallSquash = 0.14;
         }
       } else if (this.x + this.r >= p.x && this.x - this.r <= p.x + p.w
                  && sweepHitsRect(this.x, prevY, this.y, this.r, p.x, p.y, p.w, p.h)) {
@@ -209,7 +339,7 @@ export class Ball {
         if (prevY < p.y) {
           // Was above, ended below/past — snap to the top surface.
           this.y = p.y - this.r;
-          this.vy = -BALL_BOUNCE[this.size] * (this.type === 'hexagon' ? HEX_BOUNCE_MULT : 1);
+          this.vy = -BALL_BOUNCE[this.size] * (this.type === 'hexagon' ? HEX_BOUNCE_MULT : 1) * gRoot;
         } else {
           // Was below, ended above/past — snap to the underside.
           this.y = p.y + p.h + this.r;
@@ -217,7 +347,6 @@ export class Ball {
         }
       }
     }
-
 
     // Destructibles (also bouncy)
     for (const d of game.destructibles) {
@@ -227,315 +356,429 @@ export class Ball {
         this.x += c.nx * c.depth;
         this.y += c.ny * c.depth;
         if (Math.abs(c.ny) > Math.abs(c.nx)) {
-          if (c.ny < 0) this.vy = -BALL_BOUNCE[this.size];
+          if (c.ny < 0) this.vy = -BALL_BOUNCE[this.size] * gRoot;
           else this.vy = Math.abs(this.vy) * 0.7;
         } else this.vx = c.nx * Math.abs(this.vx);
       }
     }
+
+    // Pinball bumpers: a bumper throws the ball away along the contact normal.
+    // The base horizontal speed is preserved (only its sign can flip), so the
+    // ball leaves on a fresh but still learnable arc; the kick itself rides
+    // on the decaying drift channel.
+    for (const bm of game.bumpers) {
+      const dx = this.x - bm.x, dy = this.y - bm.y;
+      const rr = this.r + bm.r;
+      const d2 = dx * dx + dy * dy;
+      if (d2 >= rr * rr) continue;
+      const d = Math.sqrt(d2) || 0.001;
+      const nx = dx / d, ny = dy / d;
+      this.x = bm.x + nx * rr;
+      this.y = bm.y + ny * rr;
+      if (this.bumperCd > 0) continue;
+      this.bumperCd = 0.12;
+      if (Math.abs(nx) > 0.25) this.vx = Math.sign(nx) * Math.abs(this.vx);
+      this.driftVx = clamp(this.driftVx + nx * 150, -190, 190);
+      // Upward hits launch to the ball's own natural bounce height so the
+      // rhythm it returns to is the one the player already knows.
+      this.vy = ny < 0.2
+        ? -BALL_BOUNCE[this.size] * gRoot * (0.72 + 0.28 * -Math.min(0, ny))
+        : Math.max(this.vy, 260 * ny);
+      this.wallSquash = 0.16;
+      this.lastWallTime = this.age;
+      bm.kick(game, this);
+    }
+
+    // Numerical safety net — a ball must never leave the arena or go NaN.
+    if (!(this.x === this.x) || !(this.y === this.y) || !(this.vx === this.vx) || !(this.vy === this.vy)) {
+      this.x = clamp(this.x || 480, WALL_L + this.r, WALL_R - this.r);
+      this.y = CEILING_Y + this.r + 20;
+      this.vx = BALL_HSPEED[this.size]; this.vy = 0; this.driftVx = 0;
+    }
+    if (this.y - this.r > GROUND_Y + 4) { this.y = GROUND_Y - this.r; this.vy = -BALL_BOUNCE[this.size]; }
   }
 
-  detonate(game) {
+  private onWall() {
+    this.lastWallTime = this.age;
+    this.wallSquash = 0.16;
+    AudioSys.bounceSoft('wall');
+  }
+
+  /** Explosive balls never split: once lit they blow, popping every ball in
+   *  range, shoving the ones just outside it, clearing smoke — and knocking out
+   *  a player standing inside the hot core. The fuse ring drawn while lit shows
+   *  both radii, so "shoot it, then get clear" is always a readable decision. */
+  detonate(game: Game) {
+    if (this.dead) return;
     this.dead = true;
-    AudioSys.explode();
-    game.flash = 0.2;
-    game.shake = 12;
-    // Big particle ring
-    for (let i = 0; i < 30; i++) {
+    this.fuse = 0;
+    const blastR = BLAST_RADIUS[this.size];
+    AudioSys.explode(this.size >= 2);
+    game.flash = Math.max(game.flash, 0.2);
+    game.shake = Math.max(game.shake, 8 + this.size * 2);
+    game.hitPause = Math.max(game.hitPause, 0.07);
+    game.creditPop(this, { kind: 'blast' });
+    game.shockwaves.push(new Shockwave(this.x, this.y, blastR, '#ffb347', 0.4));
+    game.shockwaves.push(new Shockwave(this.x, this.y, blastR * 0.55, '#ffffff', 0.25));
+    for (let i = 0; i < 26; i++) {
       const a = Math.random() * Math.PI * 2;
-      const s = rand(120, 360);
-      game.particles.push(new Particle(this.x, this.y, Math.cos(a) * s, Math.sin(a) * s, rand(0.4, 0.8), '#ff7733', 8, 200));
+      const s = rand(160, 460);
+      game.particles.push(new Particle(this.x, this.y, Math.cos(a) * s, Math.sin(a) * s, rand(0.3, 0.6), i % 3 ? '#ff7733' : '#ffd60a', 7, 120, 3.2, i % 2 === 0));
     }
-    // Chain: split nearby balls
-    const blastR = 130;
+    // Chain: pop balls in range, light other explosives, shove the rest.
+    const pushR = blastR + 120;
     for (const b of game.balls) {
       if (b === this || b.dead) continue;
       const dx = b.x - this.x, dy = b.y - this.y;
-      if (dx*dx + dy*dy < blastR*blastR) {
-        if (b.type === 'explosive') { b.fuse = 0.2; }
-        else { game._popBall(b, this); }
+      const d = Math.hypot(dx, dy);
+      if (d < blastR + b.r * 0.5) {
+        if (b.type === 'explosive') { if (b.fuse <= 0 || b.fuse > 0.16) b.fuse = 0.16; b.hitFlash = 0.16; }
+        else game._popBall(b, { kind: 'blast' });
+      } else if (d < pushR) {
+        const k = 1 - (d - blastR) / 120;
+        b.driftVx = clamp(b.driftVx + (dx / (d || 1)) * 170 * k, -190, 190);
+        if (dy < 0) b.vy -= 160 * k;
       }
+    }
+    // Smoke is blown clear of the blast.
+    for (const sc of game.smokeClouds) {
+      if (Math.hypot(sc.x - this.x, sc.y - this.y) < blastR + 40) sc.life = Math.min(sc.life, 0.25);
+    }
+    // Crates in range break open.
+    for (const d of game.destructibles) {
+      if (d.dead) continue;
+      if (Math.hypot(d.x + d.w / 2 - this.x, d.y + d.h / 2 - this.y) < blastR) game.breakCrate(d);
+    }
+    // Bosses take real damage from a blast — for some it is the only way in.
+    if (game.boss && !game.boss.dead) game.boss.onBlast(game, this.x, this.y, blastR);
+    // The hot core is lethal to players caught inside it.
+    const lethal = blastR * BLAST_LETHAL;
+    for (const p of game.getLivingPlayers()) {
+      if (Math.hypot(p.x - this.x, (p.y - 22) - this.y) < lethal) game.killPlayer(p, 'blast');
     }
   }
 
-  /** Apply a hit. Returns array of new child balls created (possibly empty). */
-  hit(game, source) {
-    if (this.type === 'armored' && this.armorHits > 0) {
+  /** Apply a hit. Returns array of new child balls created (possibly empty),
+   *  or null when the ball survived the hit (armor cracked / fuse lit). */
+  hit(game: Game, source) {
+    const forced = source?.kind === 'cascade' || source?.type === 'popshot';
+    if (this.type === 'armored' && this.armorHits > 0 && !forced) {
       this.armorHits--;
-      AudioSys.bossHit();
+      this.hitFlash = 0.14;
+      AudioSys.sfx('pop/flourish_armored_crack', 0.7) || AudioSys.bossHit();
       // Armor-break clang: spark spray + a small ring so the "that hit
       // counted" beat is unmissable — the cross-strap also disappears.
-      for (let i = 0; i < 8; i++) {
+      for (let i = 0; i < 9; i++) {
         const a = Math.random() * Math.PI * 2;
-        const s = rand(80, 200);
-        game.particles.push(new Particle(this.x, this.y, Math.cos(a) * s, Math.sin(a) * s - 60, rand(0.25, 0.45), i % 2 ? '#fff' : '#c7ccd1', 5, 160));
+        const s = rand(120, 300);
+        game.particles.push(new Particle(this.x, this.y, Math.cos(a) * s, Math.sin(a) * s - 60, rand(0.2, 0.4), i % 2 ? '#fff' : '#c7ccd1', 5, 160, 2, true));
       }
       game.shockwaves.push(new Shockwave(this.x, this.y, this.r + 18, '#ffffff', 0.22));
       return null; // not destroyed
     }
     if (this.type === 'explosive') {
-      // Start fuse if not already
+      if (forced) { this.detonate(game); return null; }
+      // First hit lights the fuse; anything after that just hurries it along.
       if (this.fuse <= 0) {
-        this.fuse = 0.6;
-        return null;
+        this.fuse = source?.kind === 'arc' ? 0.2 : 0.7;
+        this.hitFlash = 0.16;
+        AudioSys.fuseLit();
       }
+      return null;
     }
     if (this.type === 'smoke') {
       for (let i = 0; i < 3; i++) game.smokeClouds.push(new SmokeCloud(this.x + rand(-18, 18), this.y + rand(-12, 12), rand(32, 52), 3.4));
     }
-    if (this.type === 'electric' && source?.type === 'harpoon') {
-      // Immediate discharge bolt at the hit point
-      game.hazards.push(new Hazard('electric_beam', this.x - 6, this.y, 12, GROUND_Y - this.y, 0.4));
-      AudioSys.warning();
-    }
     if (this.type === 'bonus') {
       // Drop a random pickup
-      game.pickups.push(new Pickup(this.x, this.y, randomPickupType()));
+      if (game.modifier !== 'no_pickups') game.pickups.push(new Pickup(this.x, this.y, randomPickupType()));
     }
     return this.split(game);
   }
 
-  draw(ctx) {
+  draw(ctx: CanvasRenderingContext2D, t = 0, frozen = false) {
     const c = BALL_COLORS[this.type] || BALL_COLORS.normal;
+    const r = this.r;
     // Shadow — alpha and width scale with how close the ball is to the floor,
     // giving the player a strong trajectory cue without obscuring the world.
-    const altitude = clamp(GROUND_Y - (this.y + this.r), 0, 400);
+    const altitude = clamp(GROUND_Y - (this.y + r), 0, 400);
     const shadowAlpha = 0.32 * (1 - altitude / 400) + 0.06;
-    const shadowRX = this.r * (0.75 - altitude / 700);
+    const shadowRX = r * (0.75 - altitude / 700);
     ctx.fillStyle = `rgba(0,0,0,${shadowAlpha.toFixed(3)})`;
     ctx.beginPath();
     ctx.ellipse(this.x, GROUND_Y + 2, Math.max(6, shadowRX), 4, 0, 0, Math.PI * 2);
     ctx.fill();
-    // Squash-and-stretch — after a floor bounce we squash horizontally and
-    // recover over ~180ms. Fully airborne balls render as perfect circles.
+
+    // ---- Deformation: impact squash + velocity stretch + spawn pop-in ----
+    // The ball is drawn at unit scale and the context is scaled, so every
+    // overlay (cracks, icons, highlights) deforms with the body for free.
     const sqz = this.squashTime / 0.18;
-    const rx = this.r * (1 + sqz * 0.28);
-    const ry = this.r * (1 - sqz * 0.24);
-    // Body — full-radius radial gradient. Top-left light source.
+    const wsq = this.wallSquash / 0.16;
+    const speedStretch = Math.min(0.05, Math.abs(this.vy) / 12000);
+    let sx = (1 + sqz * 0.2) * (1 - wsq * 0.12) * (1 - speedStretch);
+    let sy = (1 - sqz * 0.18) * (1 + wsq * 0.1) * (1 + speedStretch);
+    if (this.bornT > 0) {
+      // Children tear out of the parent: start small, overshoot, settle.
+      const k = 1 - this.bornT / 0.16;
+      const pop = 0.55 + 0.45 * k + Math.sin(k * Math.PI) * 0.18;
+      sx *= pop; sy *= pop;
+    }
+    const cy = this.y + r * (1 - sy) * sqz;         // keep the base planted while squashed
     const isHex = this.type === 'hexagon';
-    const grad = ctx.createRadialGradient(this.x - rx * 0.4, this.y - ry * 0.4, rx * 0.1, this.x, this.y, rx);
+
+    // Heat / slime aura from a reactive floor patch (drawn unscaled, behind).
+    if (this.surfaceFx !== 0) {
+      const k = Math.abs(this.surfaceFx);
+      ctx.globalAlpha = 0.35 * k;
+      ctx.fillStyle = this.surfaceFx > 0 ? '#ff9a3c' : '#9be15d';
+      ctx.beginPath(); ctx.arc(this.x, cy, r + 5 + k * 3, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    // PopShot mark — a golden corona on balls that are about to cascade.
+    if (this.cascade) {
+      const pulse = 0.5 + Math.sin(t * 40 + this.id) * 0.5;
+      ctx.globalAlpha = 0.5 + pulse * 0.4;
+      ctx.strokeStyle = '#fff3b0';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(this.x, cy, r + 3 + pulse * 3, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    if (this.type === 'smoke') {
+      // Wispy outer halo — three soft rings of decreasing alpha to fake a
+      // diffuse, smoke-cloaked edge without using filters.
+      for (let i = 0; i < 3; i++) {
+        ctx.globalAlpha = 0.12 - i * 0.03;
+        ctx.fillStyle = '#aab0b8';
+        ctx.beginPath();
+        ctx.arc(this.x + Math.sin(t * 2 + i * 2) * 2, cy + Math.cos(t * 1.7 + i) * 2, r + 3 + i * 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    } else if (this.type === 'lava') {
+      // Heat glow — a breathing ember halo so lava reads as HOT at a glance.
+      const breathe = 0.5 + Math.sin(t * 5 + this.id) * 0.5;
+      ctx.globalAlpha = 0.16 + breathe * 0.1;
+      ctx.fillStyle = '#ff7b1c';
+      ctx.beginPath(); ctx.arc(this.x, cy, r + 5 + breathe * 2, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    ctx.save();
+    ctx.translate(this.x, cy);
+    ctx.scale(sx, sy);
+
+    // Body — full-radius radial gradient. Top-left light source.
+    const grad = ctx.createRadialGradient(-r * 0.4, -r * 0.4, r * 0.1, 0, 0, r);
     grad.addColorStop(0,    '#fff');
     grad.addColorStop(0.18, c[0]);
     grad.addColorStop(0.85, c[1]);
     grad.addColorStop(1,    c[1]);
     ctx.fillStyle = grad;
+    const rot = this.spin * 0.6;
     if (isHex) {
-      // Six-sided polygon, rotating slowly with horizontal velocity. Jagged
+      // Six-sided polygon, rotating with horizontal travel. Jagged
       // silhouette reads instantly as different physics.
-      const rot = this.spin * 0.4 + this.x * 0.01;
       ctx.beginPath();
       for (let i = 0; i < 6; i++) {
         const a = rot + (i / 6) * Math.PI * 2;
-        const px = this.x + Math.cos(a) * rx;
-        const py = this.y + Math.sin(a) * ry;
+        const px = Math.cos(a) * r, py = Math.sin(a) * r;
         if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
       }
       ctx.closePath();
       ctx.fill();
-      // Faceted shading — clip to the hex outline, then draw a dark gradient
-      // band across the bottom half so the lower faces read as in-shadow.
-      ctx.save();
-      ctx.clip();
-      const hexShade = ctx.createLinearGradient(0, this.y - ry * 0.2, 0, this.y + ry);
+      // Facets: spokes from the centre to each vertex + a lit top wedge.
+      ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = rot + (i / 6) * Math.PI * 2;
+        ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+      }
+      ctx.stroke();
+      // Re-trace the outline, shade the lower faces, and leave the path
+      // current for the outline stroke below.
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        const a = rot + (i / 6) * Math.PI * 2;
+        const px = Math.cos(a) * r, py = Math.sin(a) * r;
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      const hexShade = ctx.createLinearGradient(0, -r * 0.2, 0, r);
       hexShade.addColorStop(0, 'rgba(0,0,0,0)');
       hexShade.addColorStop(1, 'rgba(0,0,0,0.4)');
       ctx.fillStyle = hexShade;
-      ctx.fillRect(this.x - rx, this.y - ry, rx * 2, ry * 2);
-      ctx.restore();
+      ctx.fill();
     } else {
-      ctx.beginPath(); ctx.ellipse(this.x, this.y, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
       // Inner shadow ring — soft dark crescent on the bottom-right, sells
       // volume. Skip for hex (its facets already convey depth).
-      const innerGrad = ctx.createRadialGradient(
-        this.x + rx * 0.3, this.y + ry * 0.4, rx * 0.3,
-        this.x + rx * 0.3, this.y + ry * 0.4, rx,
-      );
+      const innerGrad = ctx.createRadialGradient(r * 0.3, r * 0.4, r * 0.3, r * 0.3, r * 0.4, r);
       innerGrad.addColorStop(0, 'rgba(0,0,0,0)');
       innerGrad.addColorStop(0.8, 'rgba(0,0,0,0)');
       innerGrad.addColorStop(1, 'rgba(0,0,0,0.35)');
       ctx.fillStyle = innerGrad;
-      ctx.beginPath(); ctx.ellipse(this.x, this.y, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+      // Rolling surface marks — two soft blobs that orbit with the ball's
+      // spin. They make travel direction and speed readable from the body
+      // itself, and keep big balls from looking like static stickers.
+      if (this.type === 'normal' || this.type === 'sludge' || this.type === 'bonus' || this.type === 'star') {
+        ctx.fillStyle = 'rgba(255,255,255,0.13)';
+        for (let i = 0; i < 2; i++) {
+          const a = rot * 1.6 + i * Math.PI;
+          ctx.beginPath();
+          ctx.ellipse(Math.cos(a) * r * 0.5, Math.sin(a) * r * 0.5, r * 0.24, r * 0.16, a, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2);
     }
-    // Outline — softer than the previous hard #1c0010. Uses dark-tone of the
-    // ball's own palette so each ball "owns" its silhouette.
+    // Outline — dark tone of the ball's own palette so each ball "owns" its
+    // silhouette.
     ctx.strokeStyle = c[1];
     ctx.lineWidth = 1.5;
     ctx.stroke();
+
+    // ---------- Per-type material ----------
+    if (this.type === 'lava') {
+      // Magma crust: glowing fissures that rotate with the ball and pulse.
+      const glow = 0.55 + Math.sin(t * 6 + this.id * 1.3) * 0.25;
+      ctx.lineCap = 'round';
+      for (let pass = 0; pass < 2; pass++) {
+        ctx.strokeStyle = pass === 0 ? `rgba(90,10,10,0.55)` : `rgba(255,214,90,${glow.toFixed(2)})`;
+        ctx.lineWidth = pass === 0 ? Math.max(2, r * 0.13) : Math.max(1, r * 0.05);
+        ctx.beginPath();
+        for (let i = 0; i < 4; i++) {
+          const a = rot + i * 1.65 + 0.4;
+          const x1 = Math.cos(a) * r * 0.2, y1 = Math.sin(a) * r * 0.2;
+          const x2 = Math.cos(a + 0.35) * r * 0.55, y2 = Math.sin(a + 0.35) * r * 0.55;
+          const x3 = Math.cos(a + 0.1) * r * 0.86, y3 = Math.sin(a + 0.1) * r * 0.86;
+          ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.lineTo(x3, y3);
+        }
+        ctx.stroke();
+      }
+    } else if (this.type === 'sludge') {
+      // Slime sheen + a couple of wobbling drips hanging off the underside.
+      ctx.globalAlpha = 0.4;
+      ctx.fillStyle = '#caf580';
+      ctx.beginPath();
+      ctx.ellipse(-r * 0.2, -r * 0.15, r * 0.6, r * 0.25, -0.3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = c[1];
+      for (let i = 0; i < 2; i++) {
+        const dx = (i === 0 ? -0.38 : 0.3) * r;
+        const len = r * (0.22 + 0.14 * (0.5 + Math.sin(t * 3 + i * 2 + this.id) * 0.5));
+        ctx.beginPath();
+        ctx.ellipse(dx, r * 0.86 + len * 0.4, r * 0.11, len, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else if (this.type === 'armored') {
+      // Riveted plating. Intact: a bolted cross-strap. Cracked: the strap is
+      // gone and a fracture runs across the shell — one more hit splits it.
+      if (this.armorHits > 0) {
+        ctx.strokeStyle = '#2a3036';
+        ctx.lineWidth = Math.max(3, r * 0.2);
+        ctx.beginPath();
+        ctx.moveTo(-r * 0.96, 0); ctx.lineTo(r * 0.96, 0);
+        ctx.moveTo(0, -r * 0.96); ctx.lineTo(0, r * 0.96);
+        ctx.stroke();
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(-r * 0.9, -r * 0.1); ctx.lineTo(r * 0.9, -r * 0.1);
+        ctx.stroke();
+        ctx.fillStyle = '#e9eef5';
+        for (let i = 0; i < 4; i++) {
+          const a = i * Math.PI / 2;
+          ctx.beginPath(); ctx.arc(Math.cos(a) * r * 0.62, Math.sin(a) * r * 0.62, Math.max(1.4, r * 0.07), 0, Math.PI * 2); ctx.fill();
+        }
+      } else {
+        ctx.strokeStyle = '#20252a';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(-r * 0.75, -r * 0.3); ctx.lineTo(-r * 0.3, -r * 0.05); ctx.lineTo(-r * 0.1, -r * 0.4);
+        ctx.lineTo(r * 0.2, r * 0.05); ctx.lineTo(r * 0.72, -r * 0.12);
+        ctx.moveTo(-r * 0.3, -r * 0.05); ctx.lineTo(-r * 0.2, r * 0.5);
+        ctx.moveTo(r * 0.2, r * 0.05); ctx.lineTo(r * 0.36, r * 0.6);
+        ctx.stroke();
+      }
+    } else if (this.type === 'explosive') {
+      // Bomb core: a breathing ember when dormant, a frantic strobe when lit.
+      const lit = this.fuse > 0;
+      const k = lit ? (Math.floor(this.fuse * 14) % 2 === 0 ? 1 : 0.35) : 0.6 + Math.sin(t * 4 + this.id) * 0.2;
+      ctx.fillStyle = lit && k === 1 ? '#fff' : '#ffd60a';
+      ctx.globalAlpha = lit ? 1 : 0.9;
+      ctx.beginPath(); ctx.arc(0, 0, r * (lit ? 0.42 : 0.33) * (0.9 + k * 0.2), 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = 'rgba(40,0,0,0.6)';
+      ctx.lineWidth = Math.max(1.5, r * 0.07);
+      ctx.beginPath(); ctx.arc(0, 0, r * 0.62, rot, rot + Math.PI * 1.2); ctx.stroke();
+    }
+
     // Specular highlight — small bright "wet" dot, plus the larger soft
     // primary highlight underneath. Skip for hex (no glass-ball read).
     if (!isHex) {
-      // Soft primary highlight.
       ctx.fillStyle = 'rgba(255,255,255,0.45)';
       ctx.beginPath();
-      ctx.ellipse(this.x - rx * 0.35, this.y - ry * 0.4, rx * 0.28, ry * 0.18, -0.4, 0, Math.PI * 2);
+      ctx.ellipse(-r * 0.35, -r * 0.4, r * 0.28, r * 0.18, -0.4, 0, Math.PI * 2);
       ctx.fill();
-      // Small bright specular dot — the "glass marble" signature.
       ctx.fillStyle = 'rgba(255,255,255,0.95)';
       ctx.beginPath();
-      ctx.ellipse(this.x - rx * 0.45, this.y - ry * 0.5, rx * 0.1, ry * 0.07, -0.4, 0, Math.PI * 2);
+      ctx.ellipse(-r * 0.45, -r * 0.5, r * 0.1, r * 0.07, -0.4, 0, Math.PI * 2);
       ctx.fill();
       // Fresnel rim — subtle bright crescent on the bottom-left edge.
-      ctx.save();
       ctx.globalAlpha = 0.32;
       ctx.strokeStyle = '#fff';
       ctx.lineWidth = 1.2;
       ctx.beginPath();
-      ctx.ellipse(this.x, this.y, rx * 0.92, ry * 0.92, 0, Math.PI * 0.7, Math.PI * 1.15);
+      ctx.arc(0, 0, r * 0.92, Math.PI * 0.7, Math.PI * 1.15);
       ctx.stroke();
-      ctx.restore();
-    }
-    // ---------- Per-type material polish ----------
-    // Subtle surface-detail layered over the base gradient. These passes are
-    // intentionally faint — they enrich the material without obscuring the
-    // ball's color identity.
-    if (this.type === 'lava') {
-      // Magma cracks — a few short dark streaks that hint at a hot crust.
-      ctx.save();
-      ctx.globalAlpha = 0.45;
-      ctx.strokeStyle = '#5a0a0a';
-      ctx.lineWidth = 1;
-      const seed = Math.floor(this.x * 0.07) + Math.floor(this.y * 0.07);
-      for (let i = 0; i < 3; i++) {
-        const a = ((seed + i * 53) % 360) * Math.PI / 180;
-        const dx = Math.cos(a) * rx * 0.55;
-        const dy = Math.sin(a) * ry * 0.55;
-        ctx.beginPath();
-        ctx.moveTo(this.x + dx, this.y + dy);
-        ctx.lineTo(this.x + dx * 0.35, this.y + dy * 0.35);
-        ctx.stroke();
-      }
-      ctx.restore();
-    } else if (this.type === 'smoke') {
-      // Wispy outer halo — three soft rings of decreasing alpha to fake a
-      // diffuse, smoke-cloaked edge without using filters.
-      ctx.save();
-      for (let i = 0; i < 3; i++) {
-        ctx.globalAlpha = 0.12 - i * 0.03;
-        ctx.fillStyle = '#aab0b8';
-        ctx.beginPath();
-        ctx.ellipse(this.x, this.y, rx + 3 + i * 4, ry + 3 + i * 4, 0, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.restore();
-    } else if (this.type === 'sludge') {
-      // Slime sheen — bright green highlight band on the side.
-      ctx.save();
-      ctx.globalAlpha = 0.4;
-      ctx.fillStyle = '#caf580';
-      ctx.beginPath();
-      ctx.ellipse(this.x - rx * 0.2, this.y - ry * 0.15, rx * 0.6, ry * 0.25, -0.3, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.restore();
-    } else if (this.type === 'armored') {
-      // Metal plate seam — single horizontal scratch line that catches light.
-      ctx.save();
-      ctx.globalAlpha = 0.5;
-      ctx.strokeStyle = 'rgba(255,255,255,0.7)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(this.x - rx * 0.55, this.y - ry * 0.15);
-      ctx.lineTo(this.x + rx * 0.5,  this.y - ry * 0.1);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    // Flashing micro-ball marker (Panic mode) — strobing white ring around the
-    // ball. Visible only at size 0 since that's the ball the player must pop
-    // to trigger the time-stop reward.
-    if (this.flashing && this.size === 0) {
-      const strobe = 0.5 + Math.abs(Math.sin(performance.now() / 70)) * 0.5;
-      ctx.save();
-      ctx.globalAlpha = 0.6 + strobe * 0.4;
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2 + strobe * 2;
-      ctx.beginPath();
-      ctx.arc(this.x, this.y, this.r + 4 + strobe * 2, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
+      ctx.globalAlpha = 1;
     }
 
     // Type icons
     if (this.type === 'electric') {
-      // Pre-discharge warning: the closer to 0 the charge timer is, the brighter
-      // the halo. Below 0.6s remaining the ring strobes white. Gives the player
-      // a clear "about to fire downward" cue.
-      const charge = this.electricCharge;
-      if (charge < 1.2) {
-        const urgency = clamp(1 - charge / 1.2, 0, 1);
-        const strobe = 0.5 + Math.abs(Math.sin(performance.now() / (40 + (1 - urgency) * 120))) * 0.5;
-        ctx.save();
-        ctx.globalAlpha = 0.35 + urgency * 0.55 * strobe;
-        ctx.strokeStyle = '#ffd60a';
-        ctx.lineWidth = 3 + urgency * 4;
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.r + 4 + urgency * 4, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.restore();
-      }
       ctx.strokeStyle = '#fff';
-      ctx.lineWidth = 2 + Math.sin(performance.now() / 80) * 1;
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = Math.max(2, r * 0.1) + Math.sin(t * 12) * 0.6;
+      const k = r / 26;
       ctx.beginPath();
-      ctx.moveTo(this.x - 4, this.y - 6);
-      ctx.lineTo(this.x + 2, this.y - 1);
-      ctx.lineTo(this.x - 2, this.y + 1);
-      ctx.lineTo(this.x + 4, this.y + 6);
-      ctx.stroke();
-    } else if (this.type === 'explosive') {
-      if (this.fuse > 0 && Math.floor(this.fuse * 10) % 2 === 0) {
-        ctx.fillStyle = '#fff';
-      } else {
-        ctx.fillStyle = '#ffd60a';
-      }
-      ctx.beginPath();
-      ctx.arc(this.x, this.y, this.r * 0.35, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (this.type === 'armored' && this.armorHits > 0) {
-      // Cross strap visual
-      ctx.strokeStyle = '#222';
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.moveTo(this.x - this.r, this.y); ctx.lineTo(this.x + this.r, this.y);
-      ctx.moveTo(this.x, this.y - this.r); ctx.lineTo(this.x, this.y + this.r);
-      ctx.stroke();
-    } else if (this.type === 'armored') {
-      ctx.strokeStyle = '#20252a';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(this.x - this.r * 0.35, this.y - this.r * 0.45);
-      ctx.lineTo(this.x - this.r * 0.1, this.y - this.r * 0.15);
-      ctx.lineTo(this.x - this.r * 0.28, this.y + this.r * 0.1);
-      ctx.moveTo(this.x + this.r * 0.18, this.y - this.r * 0.35);
-      ctx.lineTo(this.x + this.r * 0.02, this.y);
-      ctx.lineTo(this.x + this.r * 0.28, this.y + this.r * 0.28);
+      ctx.moveTo(-4 * k, -9 * k);
+      ctx.lineTo(3 * k, -1.5 * k);
+      ctx.lineTo(-3 * k, 1.5 * k);
+      ctx.lineTo(4 * k, 9 * k);
       ctx.stroke();
     } else if (this.type === 'bonus') {
       // Brand display face (not raw sans-serif) with an ink outline so the
       // "?" reads on the bright bonus body and matches the game's text.
-      ctx.font = displayFont(this.r * 1.15);
+      ctx.font = displayFont(r * 1.15);
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.lineJoin = 'round';
-      ctx.lineWidth = Math.max(2, this.r * 0.12);
+      ctx.lineWidth = Math.max(2, r * 0.12);
       ctx.strokeStyle = INK;
-      ctx.strokeText('?', this.x, this.y);
+      ctx.strokeText('?', 0, 1);
       ctx.fillStyle = '#fff';
-      ctx.fillText('?', this.x, this.y);
+      ctx.fillText('?', 0, 1);
       ctx.textBaseline = 'alphabetic';
     } else if (this.type === 'star') {
       // Cycle face: 0 = clock dial (freeze), 1 = star (full clear).
-      ctx.save();
       ctx.fillStyle = '#0a1832';
       ctx.strokeStyle = '#fff';
       ctx.lineWidth = 2;
       if (this.starMode === 0) {
         // Clock dial — circle outline + two hands.
+        ctx.strokeStyle = '#0a1832';
+        ctx.lineWidth = 2.5;
         ctx.beginPath();
-        ctx.arc(this.x, this.y, this.r * 0.55, 0, Math.PI * 2);
+        ctx.arc(0, 0, r * 0.55, 0, Math.PI * 2);
         ctx.stroke();
-        const ang = (performance.now() / 320) % (Math.PI * 2);
+        const ang = (t * 3) % (Math.PI * 2);
         ctx.beginPath();
-        ctx.moveTo(this.x, this.y);
-        ctx.lineTo(this.x + Math.cos(ang) * this.r * 0.45, this.y + Math.sin(ang) * this.r * 0.45);
-        ctx.moveTo(this.x, this.y);
-        ctx.lineTo(this.x, this.y - this.r * 0.4);
+        ctx.moveTo(0, 0);
+        ctx.lineTo(Math.cos(ang) * r * 0.45, Math.sin(ang) * r * 0.45);
+        ctx.moveTo(0, 0);
+        ctx.lineTo(0, -r * 0.4);
         ctx.stroke();
       } else {
         // Filled star
@@ -544,25 +787,130 @@ export class Ball {
         ctx.beginPath();
         for (let i = 0; i < 10; i++) {
           const ang = (i / 10) * Math.PI * 2 - Math.PI / 2;
-          const r = i % 2 === 0 ? this.r * 0.65 : this.r * 0.28;
-          const sx = this.x + Math.cos(ang) * r;
-          const sy = this.y + Math.sin(ang) * r;
-          if (i === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
+          const rr = i % 2 === 0 ? r * 0.65 : r * 0.28;
+          const sxp = Math.cos(ang) * rr, syp = Math.sin(ang) * rr;
+          if (i === 0) ctx.moveTo(sxp, syp); else ctx.lineTo(sxp, syp);
         }
         ctx.closePath();
         ctx.fill();
         ctx.stroke();
       }
-      ctx.restore();
+    }
+
+    // Frozen: a frosted shell + glints. Tells the player the ball is locked.
+    if (frozen) {
+      ctx.fillStyle = 'rgba(190,235,255,0.42)';
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(0, 0, r + 1.5, 0, Math.PI * 2); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.5, -r * 0.1); ctx.lineTo(-r * 0.2, -r * 0.5);
+      ctx.moveTo(r * 0.1, r * 0.55); ctx.lineTo(r * 0.5, r * 0.2);
+      ctx.stroke();
+    }
+    // Hit flash — a white veil over the body on a non-lethal hit.
+    if (this.hitFlash > 0) {
+      ctx.globalAlpha = Math.min(1, this.hitFlash / 0.14) * 0.85;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
+
+    // ---- Unscaled overlays (rings, arcs, telegraphs) ----
+    // Flashing micro-ball marker (Panic mode) — strobing white ring. Visible
+    // only at size 0 since that's the ball the player must pop to trigger the
+    // time-stop reward.
+    if (this.flashing && this.size === 0) {
+      const strobe = 0.5 + Math.abs(Math.sin(t * 14)) * 0.5;
+      ctx.globalAlpha = 0.6 + strobe * 0.4;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2 + strobe * 2;
+      ctx.beginPath();
+      ctx.arc(this.x, cy, r + 4 + strobe * 2, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    if (this.type === 'electric') {
+      // Live crackle: short arcs dancing on the surface, re-rolled ~16×/s
+      // from a cheap time hash so they flicker without allocating.
+      const tick = Math.floor(t * 16) + this.id * 7;
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      for (let i = 0; i < 3; i++) {
+        const h = Math.sin((tick + i * 31) * 12.9898) * 43758.5453;
+        const a = (h - Math.floor(h)) * Math.PI * 2;
+        const r1 = r * 0.96, r2 = r + 5 + (i % 2) * 4;
+        ctx.moveTo(this.x + Math.cos(a) * r1, cy + Math.sin(a) * r1);
+        ctx.lineTo(this.x + Math.cos(a + 0.22) * (r1 + r2) * 0.5, cy + Math.sin(a + 0.22) * (r1 + r2) * 0.5);
+        ctx.lineTo(this.x + Math.cos(a + 0.05) * r2, cy + Math.sin(a + 0.05) * r2);
+      }
+      ctx.stroke();
+      // Pre-discharge warning: the closer to 0 the charge timer is, the
+      // brighter the halo, plus a dashed line showing exactly where the bolt
+      // will land. Gives the player a clear "about to fire downward" cue.
+      const charge = this.electricCharge;
+      if (charge < 1.1) {
+        const urgency = clamp(1 - charge / 1.1, 0, 1);
+        const strobe = 0.5 + Math.abs(Math.sin(t * (8 + urgency * 22))) * 0.5;
+        ctx.globalAlpha = 0.35 + urgency * 0.55 * strobe;
+        ctx.strokeStyle = '#ffd60a';
+        ctx.lineWidth = 3 + urgency * 4;
+        ctx.beginPath();
+        ctx.arc(this.x, cy, r + 4 + urgency * 4, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 0.25 + urgency * 0.45;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 8]);
+        ctx.beginPath();
+        ctx.moveTo(this.x, cy + r + 4); ctx.lineTo(this.x, GROUND_Y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+      }
+    } else if (this.type === 'explosive' && this.fuse > 0) {
+      // Lit fuse: draw both radii. Outer dashed ring = everything here pops.
+      // Inner solid ring = the lethal core. Shrinks its pulse as the fuse burns.
+      const blastR = BLAST_RADIUS[this.size];
+      const k = clamp(this.fuse / 0.7, 0, 1);
+      ctx.globalAlpha = 0.5 + (1 - k) * 0.4;
+      ctx.strokeStyle = '#ffb347';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 7]);
+      ctx.lineDashOffset = -t * 60;
+      ctx.beginPath(); ctx.arc(this.x, cy, blastR, 0, Math.PI * 2); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.strokeStyle = '#ff4d4d';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(this.x, cy, blastR * BLAST_LETHAL, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 0.1 + (1 - k) * 0.14;
+      ctx.fillStyle = '#ff4d4d';
+      ctx.beginPath(); ctx.arc(this.x, cy, blastR * BLAST_LETHAL, 0, Math.PI * 2); ctx.fill();
+      ctx.globalAlpha = 1;
     }
   }
 }
 
-export function randomPickupType() {
-  const pool: PickupType[] = [
-    'shield','double','triple','powerwire','diagonal',
-    'machinegun','laser','flame','shotgun','shuriken','bomb',
-    'score','life','time','slowtime','freeze','clearsmoke','magnet','combo','dynamite',
-  ];
-  return pool[randi(0, pool.length - 1)];
+/** Which reactive patch (if any) covers floor position x. Lava wins ties. */
+function floorPatchAt(game: Game, x: number): 'lava' | 'slime' | null {
+  let found: 'lava' | 'slime' | null = null;
+  for (const h of game.hazards) {
+    if (h.dead || (h.type !== 'lava' && h.type !== 'slime')) continue;
+    if (x >= h.x - 4 && x <= h.x + h.w + 4) {
+      if (h.type === 'lava') return 'lava';
+      found = 'slime';
+    }
+  }
+  return found;
+}
+
+const PICKUP_POOL: PickupType[] = [
+  'shield', 'double', 'triple', 'powerwire', 'diagonal',
+  'machinegun', 'laser', 'flame', 'shotgun', 'shuriken', 'bomb',
+  'score', 'life', 'time', 'slowtime', 'freeze', 'clearsmoke', 'magnet', 'combo', 'dynamite',
+];
+export function randomPickupType(): PickupType {
+  return gpick(PICKUP_POOL);
 }

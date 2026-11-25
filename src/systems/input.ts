@@ -67,21 +67,25 @@ const gamepadKeyState: Record<string, boolean> = {
   KeyP: false,
   KeyR: false,
   KeyM: false,
+  GamepadDash: false,
 };
 const gamepad2KeyState: Record<string, boolean> = {
   Gamepad2Left: false,
   Gamepad2Right: false,
   Gamepad2Shoot: false,
+  Gamepad2Dash: false,
 };
 const gamepad3KeyState: Record<string, boolean> = {
   Gamepad3Left: false,
   Gamepad3Right: false,
   Gamepad3Shoot: false,
+  Gamepad3Dash: false,
 };
 const gamepad4KeyState: Record<string, boolean> = {
   Gamepad4Left: false,
   Gamepad4Right: false,
   Gamepad4Shoot: false,
+  Gamepad4Dash: false,
 };
 
 function applySyntheticKey(code: string, held: boolean, sourceState: Record<string, boolean>) {
@@ -369,6 +373,10 @@ export function tickAutoFire(game: Game) {
  *  while in PLAYING will join Player 2 the same way pressing I/K/U on the
  *  keyboard does, since both paths just set the same synthetic keys — and
  *  likewise for a third/fourth controller joining Players 3/4. */
+function padDash(pad: Gamepad): boolean {
+  return !!(pad.buttons[4]?.pressed || pad.buttons[5]?.pressed || pad.buttons[6]?.pressed || pad.buttons[7]?.pressed);
+}
+
 export function tickGamepadInputs(state: GameState) {
   const [pad1, pad2, pad3, pad4] = getConnectedGamepads();
   let anyActivity = false;
@@ -396,6 +404,8 @@ export function tickGamepadInputs(state: GameState) {
     applySyntheticKey('KeyR', !!pad1.buttons[2]?.pressed, gamepadKeyState);
     applySyntheticKey('KeyM', !!pad1.buttons[3]?.pressed, gamepadKeyState);
     applySyntheticKey('KeyP', !!pad1.buttons[9]?.pressed, gamepadKeyState);
+    // Dash: either bumper or either trigger (L1/R1/L2/R2).
+    applySyntheticKey('GamepadDash', padDash(pad1), gamepadKeyState);
 
     if (
       horizontalLeft || horizontalRight || verticalUp || verticalDown
@@ -423,6 +433,7 @@ export function tickGamepadInputs(state: GameState) {
     applySyntheticKey('Gamepad2Left', horizontalLeft && !horizontalRight, gamepad2KeyState);
     applySyntheticKey('Gamepad2Right', horizontalRight && !horizontalLeft, gamepad2KeyState);
     applySyntheticKey('Gamepad2Shoot', shoot, gamepad2KeyState);
+    applySyntheticKey('Gamepad2Dash', padDash(pad2), gamepad2KeyState);
 
     if (horizontalLeft || horizontalRight || shoot) anyActivity = true;
   }
@@ -438,6 +449,7 @@ export function tickGamepadInputs(state: GameState) {
     applySyntheticKey('Gamepad3Left', horizontalLeft && !horizontalRight, gamepad3KeyState);
     applySyntheticKey('Gamepad3Right', horizontalRight && !horizontalLeft, gamepad3KeyState);
     applySyntheticKey('Gamepad3Shoot', shoot, gamepad3KeyState);
+    applySyntheticKey('Gamepad3Dash', padDash(pad3), gamepad3KeyState);
 
     if (horizontalLeft || horizontalRight || shoot) anyActivity = true;
   }
@@ -453,6 +465,7 @@ export function tickGamepadInputs(state: GameState) {
     applySyntheticKey('Gamepad4Left', horizontalLeft && !horizontalRight, gamepad4KeyState);
     applySyntheticKey('Gamepad4Right', horizontalRight && !horizontalLeft, gamepad4KeyState);
     applySyntheticKey('Gamepad4Shoot', shoot, gamepad4KeyState);
+    applySyntheticKey('Gamepad4Dash', padDash(pad4), gamepad4KeyState);
 
     if (horizontalLeft || horizontalRight || shoot) anyActivity = true;
   }

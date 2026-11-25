@@ -58,6 +58,9 @@ export interface RobotPose {
   dist?: number;     // px        accumulated travel -> wheel spin + tread scroll
   fireT?: number;    // seconds   time since fire began, or <0 for "at rest"
   cheerT?: number;   // seconds   time since a successful pop, or <0 for none
+  lookX?: number;    // -1..1     eye tracks a point of interest (nearest threat)
+  lookY?: number;    // -1..1
+  fear?: number;     // 0..1      wide eye + pinprick iris when danger is close
   pal?: RobotPalette;
   scale?: number;    // default 1
 }
@@ -258,6 +261,14 @@ export function drawBot(ctx: CanvasRenderingContext2D, x: number, groundY: numbe
   let look = Math.sin(t * 0.8) * 0.55, lookY = Math.sin(t * 0.6 + 1) * 0.16;
   if (speed > 10) look = clamp(Math.sign(vx) * 0.72, -0.85, 0.85);
   let openV = 1, squint = 0, smile = 0, iris = 1, browTilt = 0;
+  // Threat awareness: the eye follows the nearest ball, and widens with a
+  // shrunken iris as that ball closes in. Firing and cheering still override.
+  if (pose.lookX != null) {
+    look = lerp(look, clamp(pose.lookX, -0.85, 0.85), 0.85);
+    lookY = lerp(lookY, clamp(pose.lookY || 0, -0.9, 0.5), 0.85);
+  }
+  const fear = clamp(pose.fear || 0, 0, 1);
+  if (fear > 0) { iris = lerp(iris, 0.58, fear); browTilt = lerp(browTilt, 0.28, fear); }
   if (env.charge > 0) { const c = env.charge;
     squint = c * 0.55; iris = lerp(1, 0.62, c); browTilt = -0.30 * c; openV = lerp(1, 0.8, c);
     look = lerp(look, 0, clamp((pose.fireT || 0) / 0.09, 0, 1)); lookY = lerp(lookY, -0.18, c); }

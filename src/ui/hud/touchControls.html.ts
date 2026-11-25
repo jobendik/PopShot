@@ -35,6 +35,9 @@ const KEY_FOR: Record<BtnId, string> = {
 const buttons: Record<BtnId, HTMLElement | null> = { left: null, right: null };
 const activePointer = new Map<number, BtnId | null>();
 const held: Record<BtnId, boolean> = { left: false, right: false };
+/** Timestamp of the last tap-down per zone, for double-tap → DASH. */
+const lastTap: Record<BtnId, number> = { left: -1e9, right: -1e9 };
+const DOUBLE_TAP_MS = 250;
 
 /** Point-in-rect test against a zone element's actual on-screen box. Using
  *  each zone's own `getBoundingClientRect()` (rather than a single client-X
@@ -84,6 +87,16 @@ function onPointerDown(e: PointerEvent) {
   // Prevent the browser from synthesizing a long-press context menu / drag
   // image, and from sending duplicate mouse events to the canvas underneath.
   e.preventDefault();
+  // Double-tap a side = dash that way. A quick second tap on the SAME zone
+  // raises a one-frame synthetic key the player entity reads as a dash.
+  const now = performance.now();
+  if (now - lastTap[btn] < DOUBLE_TAP_MS) {
+    keysPressed[btn === 'left' ? 'DashLeft' : 'DashRight'] = true;
+    lastTap[btn] = -1e9;
+    Haptics.tap();
+  } else {
+    lastTap[btn] = now;
+  }
   activePointer.set(e.pointerId, btn);
   recompute();
   AudioSys.init();   // user gesture — unlock audio if still locked

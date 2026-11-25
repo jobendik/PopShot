@@ -2,7 +2,7 @@ import './styles.css';
 import { Game } from './game';
 import { AudioSys } from './systems/audio';
 import { Storage } from './systems/storage';
-import { bindCanvasInput } from './systems/input';
+import { bindCanvasInput, keys, keysPressed } from './systems/input';
 import { Platform } from './systems/platform';
 import { emit, installErrorHandlers } from './systems/analytics';
 import { captureWelcomeBack, setUsername } from './systems/daily';
@@ -139,9 +139,18 @@ if (typeof document !== 'undefined') {
 
 game.start();
 
-// Dev-only test instrumentation. Tree-shaken from production builds. Lets the
-// smoke-test harness in .smoke/ read game state (timers, lives) without
-// inventing a public API.
-if (import.meta.env && import.meta.env.DEV) {
-  (window as unknown as { __game?: typeof game }).__game = game;
+// Test instrumentation. Present in dev builds, and in production builds ONLY
+// when the page is opened with ?popdebug=1 — that lets the regression suite
+// drive the exact bundle that ships (fast-forwarding the fixed-step sim and
+// reading state) without exposing anything in normal play.
+const debugHooks = (import.meta.env && import.meta.env.DEV)
+  || (typeof location !== 'undefined' && /[?&]popdebug=1\b/.test(location.search));
+if (debugHooks) {
+  const w = window as unknown as Record<string, unknown>;
+  w.__game = game;
+  w.__keys = keys;
+  w.__keysPressed = keysPressed;
+  w.__Storage = Storage;
+  w.__Platform = Platform;
+  w.__AudioSys = AudioSys;
 }

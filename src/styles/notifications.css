@@ -181,18 +181,19 @@
    ===================================================================== */
 
 .toasts-layer {
+  /* Left rail, under the score/weapon chips. The top-centre column belongs to
+     the timer, the chain chip and in-world banners; medals own the right
+     rail. Three lanes, so no two kinds of feedback ever cover each other. */
   position: absolute;
-  top: clamp(56px, 9cqi, 80px);
-  left: 50%;
-  transform: translateX(-50%);
+  top: clamp(92px, 13cqi, 124px);
+  left: clamp(10px, 2cqi, 24px);
   z-index: var(--z-toast);
   display: flex;
   flex-direction: column;
   gap: 8px;
-  align-items: center;
+  align-items: flex-start;
   pointer-events: none;
-  /* Keep above the wave/timer chip in the HUD center cluster. */
-  max-width: min(90%, 520px);
+  max-width: min(44%, 400px);
 }
 
 .toast {
@@ -262,9 +263,9 @@
    lines instead of forcing an extra-wide pill across the whole stage. */
 @media (hover: none) and (pointer: coarse) {
   .toasts-layer {
-    top: clamp(66px, 14cqh, 96px);
+    top: clamp(74px, 17cqh, 104px);
     gap: 6px;
-    max-width: min(86%, 360px);
+    max-width: min(46%, 320px);
   }
   .toast {
     padding: 7px 13px 7px 9px;
@@ -285,9 +286,9 @@
    Use a container height query so sizing is based on the actual game stage. */
 @container (max-height: 500px) {
   .toasts-layer {
-    top: clamp(6px, 9cqh, 48px);
+    top: clamp(58px, 17cqh, 84px);
     gap: 4px;
-    max-width: min(60cqi, 320px);
+    max-width: min(44cqi, 300px);
   }
   .toast {
     padding: 5px 10px 5px 8px;

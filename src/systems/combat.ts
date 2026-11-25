@@ -1,7 +1,8 @@
-import { BALL_COLORS, BALL_SCORE, H, State, W, type DeathReason } from '../constants';
+import { BALL_COLORS, BALL_SCORE, GRAZE_SCORE, H, POPSHOT_MAX, POPSHOT_PER_GRAZE, POPSHOT_PER_POP, POPSHOT_PER_TRICK, State, W, chainMult, chainWindow, type DeathReason } from '../constants';
 import { LEVELS } from '../data/levels';
-import type { Ball } from '../entities/ball';
-import { FloatingText, Particle, Shockwave } from '../entities/particle';
+import { ARC_RANGE, type Ball } from '../entities/ball';
+import type { Destructible } from '../entities/destructible';
+import { Bolt, FloatingText, Particle, PopBurst, Shockwave, pushText } from '../entities/particle';
 import { Pickup } from '../entities/pickup';
 import type { Player } from '../entities/player';
 import type { Projectile } from '../entities/projectile';
@@ -18,357 +19,424 @@ import { pulseScoreDelta } from '../ui/hud/hud.html';
 import { Haptics } from './haptics';
 import type { Game } from '../game';
 
-/**
- * Pop a ball with full feedback: score, combo, particles, shockwave, sound,
- * combo-milestone fanfare, then run the ball's hit() to spawn child balls.
- * Invoked from the per-frame collision pass and from explosive chain reactions.
- */
-export function popBall(game: Game, ball: Ball, source: any) {
-  if (ball.dead) return;
-  Haptics.pop();
-  const baseScore = BALL_SCORE[ball.size];
-  const boost = game.comboBoostTime > 0 ? 0.5 : 0;
-  const comboMult = 1 + boost + Math.min(game.combo, 20) * 0.05;
-  const dailyMult = game.modifier === 'double_score' ? 2 : 1;
-  const gained = Math.round(baseScore * comboMult * dailyMult);
-  game.addScore(gained);
-  game.floatingTexts.push(new FloatingText(ball.x, ball.y - 10, '+' + gained, game.combo >= 5 ? '#ffd60a' : '#fff'));
-  // HUD-anchored "+N" pulse next to the score. The world-space FloatingText
-  // above shows it AT the pop; this confirms it on the HUD so the player's
-  // eye finds the score increase even if they were looking away from the
-  // ball at the moment of impact.
-  pulseScoreDelta(gained);
+/** What caused a pop. Projectiles carry `owner`; everything else is a tagged
+ *  object so chain reactions can be told apart from direct hits. */
+export type PopSource =
+  | Projectile
+  | { kind: 'cascade' | 'arc' | 'blast' | 'creature' | 'wipe' }
+  | null
+  | undefined;
 
-  // ---------- Multi-pop chain bookkeeping ----------
-  // Every popBall call extends a short-lived window. When the window closes
-  // (in playing.ts) and >=2 pops landed, we emit ONE label at the centroid
-  // instead of N separate ones — that's the whole anti-clutter mechanism.
-  game.chainCount++;
-  game.chainTimer = 0.18;
-  // Running centroid so MEGA POPs render near the actual blast center.
-  game.chainCx = (game.chainCx * (game.chainCount - 1) + ball.x) / game.chainCount;
-  game.chainCy = (game.chainCy * (game.chainCount - 1) + ball.y) / game.chainCount;
+function isShot(source: any): source is Projectile {
+  return !!source && typeof source === 'object' && 'owner' in source;
+}
 
-  // ---------- Trick chip detection (priority-ordered, max one per pop) ----------
-  // Each trick is a small bonus + small chip rendered at the ball's position.
-  // Suppress while the multi-pop chain is already running so we never stack
-  // a trick chip on top of an incoming chain label at the same location.
-  let trickLabel = '', trickBonus = 0, trickColor = '#9be7ff', trickId = '';
-  const isLastBall = game.balls.filter(b => !b.dead && b !== ball).length === 0;
-  const aliveTime = ball.age;
-  const timeSinceWall = ball.age - ball.lastWallTime;
-  const playerDist = game.player
-    ? Math.hypot(ball.x - game.player.x, ball.y - (game.player.y - 22))
-    : Infinity;
-  // CLUTCH: last ball on a timed level, taken with under 3 seconds left.
-  if (isLastBall && game.mode !== 'panic' && game.timer > 0 && game.timer < 3) {
-    trickLabel = 'CLUTCH!'; trickBonus = 150; trickColor = '#ff36c4'; trickId = 'clutch';
-  } else if (playerDist < 90 && !ball.dead) {
-    // CLOSE CALL: ball within ~90px of player's head when popped. Real skill
-    // because the player chose not to retreat from a falling ball.
-    trickLabel = 'CLOSE CALL'; trickBonus = 75; trickColor = '#ff7f50'; trickId = 'close_call';
-  } else if (ball.floorBounces === 0 && aliveTime > 0.4) {
-    // AIR POP: ball alive long enough to have hit the floor by physics, but
-    // the player got it first. Excludes freshly-spawned child balls.
-    trickLabel = 'AIR POP'; trickBonus = 60; trickColor = '#9be7ff'; trickId = 'air_pop';
-  } else if (timeSinceWall >= 0 && timeSinceWall < 0.35) {
-    // BANK SHOT: popped within 0.35s of the ball ricocheting off a wall.
-    trickLabel = 'BANK SHOT'; trickBonus = 50; trickColor = '#06d6a0'; trickId = 'bank_shot';
-  }
-  if (trickLabel) {
-    const trickGained = Math.round(trickBonus * dailyMult);
-    game.addScore(trickGained);
-    game.runTricks++;
-    Storage.data.lifetimeTricks = (Storage.data.lifetimeTricks || 0) + 1;
-    advanceMissions('trick', 1);
-    const progress = recordTrick(trickId);
-    // Small chip near the ball, offset upward so it doesn't overlap the +score.
-    game.floatingTexts.push(new FloatingText(ball.x, ball.y - 36, trickLabel, trickColor, 14));
-    if (progress.contract) {
-      const left = Math.max(0, progress.contract.target - progress.count);
-      if (progress.completedNow) {
-        FX.medal(progress.contract.title, progress.contract.label + ' complete', 'mythic', 'TITLE');
-        FX.toast('success', 'TRICK CONTRACT', progress.contract.title + ' unlocked');
-      } else if (left > 0 && (left <= 2 || progress.count % 10 === 0)) {
-        // Only surface a progress toast on real milestones — within 2 of the
-        // goal, or every 10th trick. `left > 0` guards against the contract
-        // re-firing "0 to …" forever once the target has already been met
-        // (recordTrick keeps counting past the target).
-        FX.toast('info', progress.contract.label.toUpperCase(), left + ' to ' + progress.contract.title);
-      }
+/** Centre-screen callout. Occupies the exclusive 'banner' slots, so a new
+ *  banner replaces the previous one instead of stacking on top of it. */
+export function banner(game: Game, title: string, sub = '', color = '#ffd60a', size = 52, life = 1.1) {
+  // Banners live in the upper third — above the bounce apex of most balls and
+  // well clear of the player — so a celebration never hides a threat.
+  const y = 158;
+  pushText(game.floatingTexts, new FloatingText(W / 2, y, title, color, size), 'banner', life).rise = 10;
+  if (sub) pushText(game.floatingTexts, new FloatingText(W / 2, y + size * 0.5 + 12, sub, '#fff', Math.max(14, size * 0.34)), 'banner2', life).rise = 10;
+  else for (const o of game.floatingTexts) if (o.slot === 'banner2') o.dead = true;
+}
+
+/** Feed the PopShot meter. Fires the READY beat exactly once per fill. */
+export function addCharge(game: Game, amount: number) {
+  if (game.popShotReady || amount <= 0) return;
+  let k = 1;
+  if (game.modifier === 'overcharge') k = 3;
+  if (game.getAllPlayers().length > 1) k *= 0.8;
+  game.popCharge = Math.min(POPSHOT_MAX, game.popCharge + amount * k);
+  if (game.popCharge >= POPSHOT_MAX) {
+    game.popShotReady = true;
+    AudioSys.popshotReady();
+    Haptics.pop();
+    const p = game.getLivingPlayers()[0];
+    if (p) {
+      pushText(game.floatingTexts, new FloatingText(p.x, p.y - 74, 'POPSHOT READY!', '#fff3b0', 20), 'popshot', 1.4).rise = 26;
+      game.shockwaves.push(new Shockwave(p.x, p.y - 24, 90, '#fff3b0', 0.4));
     }
   }
+}
 
-  // Lifetime pops counter — drives the Marksman title; debounced via the
-  // existing Storage.save() at combo-decay save points below.
-  Storage.data.lifetimePops = (Storage.data.lifetimePops || 0) + 1;
-  advanceMissions('pop', 1);
+/** A near miss: a ball skimmed the hurtbox without touching it. */
+export function graze(game: Game, player: Player, ball: Ball) {
+  game.grazeStreak = game.grazeStreakT > 0 ? game.grazeStreak + 1 : 1;
+  game.grazeStreakT = 2.2;
+  game.runGrazes++;
+  const mult = chainMult(game.combo) * (game.modifier === 'double_score' ? 2 : 1);
+  const gained = Math.round(GRAZE_SCORE * mult * Math.min(3, 1 + (game.grazeStreak - 1) * 0.5));
+  game.addScore(gained);
+  addCharge(game, POPSHOT_PER_GRAZE);
+  AudioSys.graze(game.grazeStreak);
+  // Sparks jump from the ball's near edge toward the player — the visible
+  // proof of how close that was.
+  const dx = player.x - ball.x, dy = (player.y - 24) - ball.y;
+  const d = Math.hypot(dx, dy) || 1;
+  const ex = ball.x + (dx / d) * ball.r, ey = ball.y + (dy / d) * ball.r;
+  for (let i = 0; i < 6; i++) {
+    const a = Math.atan2(dy, dx) + rand(-0.9, 0.9);
+    const s = rand(120, 260);
+    game.particles.push(new Particle(ex, ey, Math.cos(a) * s, Math.sin(a) * s, rand(0.14, 0.28), i % 2 ? '#9be7ff' : '#fff', 4, 0, 4, true));
+  }
+  const label = game.grazeStreak >= 2 ? 'GRAZE ×' + game.grazeStreak : 'GRAZE';
+  const ft = pushText(game.floatingTexts, new FloatingText(player.x, player.y - 62, label + '  +' + gained, '#9be7ff', 13), 'graze' + player.playerNum, 0.7);
+  ft.rise = 30;
+}
+
+/** Award a named trick: small score, PopShot charge, one compact chip. */
+function awardTrick(game: Game, id: string, label: string, bonus: number, color: string, x: number, y: number) {
+  const dailyMult = game.modifier === 'double_score' ? 2 : 1;
+  game.addScore(Math.round(bonus * dailyMult));
+  game.runTricks++;
+  addCharge(game, POPSHOT_PER_TRICK);
+  Storage.data.lifetimeTricks = (Storage.data.lifetimeTricks || 0) + 1;
+  advanceMissions('trick', 1);
+  const progress = recordTrick(id);
+  AudioSys.trick(id);
+  const ft = new FloatingText(x, y, label, color, 14);
+  ft.life = 0.8; ft.maxLife = 0.8;
+  game.floatingTexts.push(ft);
+  if (progress.contract) {
+    const left = Math.max(0, progress.contract.target - progress.count);
+    if (progress.completedNow) {
+      FX.medal(progress.contract.title, progress.contract.label + ' complete', 'mythic', 'TITLE');
+    } else if (left > 0 && left <= 2) {
+      FX.toast('info', progress.contract.label.toUpperCase(), left + ' to ' + progress.contract.title);
+    }
+  }
+}
+export { awardTrick };
+
+/**
+ * Hit a ball. Runs the ball's own reaction first — an armored shell cracking
+ * or a bomb's fuse lighting is NOT a pop and earns nothing — and only credits
+ * the pop (score, chain, feedback) when the ball was actually destroyed.
+ */
+export function popBall(game: Game, ball: Ball, source: PopSource) {
+  if (ball.dead) return;
+  if (isShot(source)) source.didHit = true;
+
+  // ---------- Panic-mode Star Bubble ----------
+  // Star Bubbles are popped instead of split. The face on the bubble dictates
+  // the effect: Clock → universal freeze (~6 s), Star → full-screen wipe.
+  if (ball.type === 'star') {
+    creditPop(game, ball, source, 0);
+    if (ball.starMode === 0) {
+      game.freezeTime = Math.max(game.freezeTime, 6);
+      AudioSys.sfx('panic/freeze_engage', 0.9);
+      banner(game, 'TIME FREEZE!', '', '#9be7ff', 40);
+      game.shockwaves.push(new Shockwave(ball.x, ball.y, 220, '#9be7ff', 0.45));
+    } else {
+      // Star face: every ball on screen pops in a wave radiating from the star.
+      AudioSys.sfx('panic/star_bubble_star_pop', 0.9);
+      let n = 0;
+      for (const b of game.balls) {
+        if (b === ball || b.dead) continue;
+        b.cascade = true;
+        b.popFuse = 0.05 + Math.hypot(b.x - ball.x, b.y - ball.y) / 1400;
+        b.popFuseKind = 'cascade';
+        n++;
+      }
+      banner(game, 'SCREEN CLEAR!', n + ' balls', '#ffd60a', 44);
+      game.flash = 0.5;
+      game.shake = 18;
+      game.shockwaves.push(new Shockwave(ball.x, ball.y, 420, '#ffd60a', 0.7));
+    }
+    ball.dead = true;
+    game.hitPause = Math.max(game.hitPause, 0.08);
+    return;
+  }
+
+  const children = ball.hit(game, source);
+  if (children === null) return;           // survived (armor / fuse) — no credit
+  creditPop(game, ball, source, children.length);
+  if (children.length > 0) {
+    AudioSys.split();
+    game.balls.push(...children);
+  }
+  ball.dead = true;
+}
+
+/**
+ * Everything that happens BECAUSE a ball was destroyed: score, chain, tricks,
+ * PopShot charge, elemental after-effects, and the layered pop feedback.
+ * Called by popBall and directly by Ball.detonate (a bomb pops itself).
+ */
+export function creditPop(game: Game, ball: Ball, source: PopSource, childCount = 0) {
+  Haptics.pop();
+  const shot = isShot(source);
+  const kind = shot ? 'shot' : (source as any)?.kind || 'other';
+  const sz = ball.size;
+
+  // ---------- Chain ----------
   const prevCombo = game.combo;
   game.combo++;
   game.maxCombo = Math.max(game.maxCombo, game.combo);
-  // Track lifetime combo to drive the Combo Crusher title.
-  if (game.combo > (Storage.data.lifetimeMaxCombo || 0)) {
-    Storage.data.lifetimeMaxCombo = game.combo;
-    // Defer save to combo-decay tick? No — combo events are infrequent enough
-    // that a localStorage write per new max is fine, and we want the value
-    // persisted even if the player closes the tab mid-run.
-    Storage.save();
+  game.comboDecay = chainWindow(game.combo);
+  game.comboWindow = game.comboDecay;
+  game.levelPops++;
+  if (game.combo > (Storage.data.lifetimeMaxCombo || 0)) Storage.data.lifetimeMaxCombo = game.combo;
+
+  // ---------- Score ----------
+  const boost = game.comboBoostTime > 0 ? 1.5 : 1;
+  const mult = chainMult(game.combo) * boost;
+  const dailyMult = game.modifier === 'double_score' ? 2 : 1;
+  const gained = Math.round(BALL_SCORE[sz] * mult * dailyMult);
+  game.addScore(gained);
+  pulseScoreDelta(gained);
+  game.chainScore += gained;
+  // World-space score tick: full size for direct hits, compact for the
+  // ripples of a chain reaction (their sum is announced by the chain label).
+  const tick = new FloatingText(ball.x, ball.y - 8, '+' + gained, mult >= 2 ? '#ffd60a' : '#fff', shot ? 17 : 12);
+  tick.life = shot ? 0.7 : 0.45; tick.maxLife = tick.life; tick.rise = 55;
+  game.floatingTexts.push(tick);
+
+  // ---------- Multi-pop window ----------
+  // Pops landing within a short window are announced as ONE label at their
+  // centroid when the window closes (see playing.ts) — never one per ball.
+  game.chainCount++;
+  game.chainTimer = 0.2;
+  game.chainCx = (game.chainCx * (game.chainCount - 1) + ball.x) / game.chainCount;
+  game.chainCy = (game.chainCy * (game.chainCount - 1) + ball.y) / game.chainCount;
+  if (kind === 'arc') game.chainArcs++;
+  if (kind === 'blast') game.chainBlasts++;
+  if (kind === 'cascade') game.chainCascade++;
+  if (shot && source.owner) game.chainOwners |= 1 << source.owner.playerNum;
+
+  addCharge(game, POPSHOT_PER_POP + (kind === 'arc' || kind === 'blast' ? 1 : 0));
+
+  // ---------- Tricks (direct hits only, max one per pop) ----------
+  const othersAlive = game.balls.some(b => !b.dead && b !== ball);
+  const isLastBall = !othersAlive && childCount === 0;
+  if (shot && source.type !== 'popshot') {
+    const owner = source.owner || game.player;
+    const playerDist = owner ? Math.hypot(ball.x - owner.x, ball.y - (owner.y - 22)) : Infinity;
+    const sinceWall = ball.age - ball.lastWallTime;
+    if (isLastBall && game.mode !== 'panic' && !game.bossLevel && game.timer > 0 && game.timer < 3) {
+      awardTrick(game, 'clutch', 'CLUTCH!', 400, '#ff36c4', ball.x, ball.y - 34);
+    } else if (playerDist < 82) {
+      // The player held their ground under a falling ball.
+      awardTrick(game, 'close_call', 'CLOSE CALL', 90, '#ff7f50', ball.x, ball.y - 34);
+    } else if (ball.floorBounces === 0 && ball.age > 0.4 && ball.bornT <= 0) {
+      // Caught on the fly before it ever touched the floor.
+      awardTrick(game, 'air_pop', 'AIR POP', 60, '#9be7ff', ball.x, ball.y - 34);
+    } else if (sinceWall >= 0 && sinceWall < 0.35) {
+      awardTrick(game, 'bank_shot', 'BANK SHOT', 60, '#06d6a0', ball.x, ball.y - 34);
+    } else if (Math.abs(ball.vy) < 46 && ball.floorBounces > 0 && ball.size >= 1) {
+      // Hit dead on the top of its arc — the hardest moment to time.
+      awardTrick(game, 'apex', 'APEX', 50, '#e0b3ff', ball.x, ball.y - 34);
+    }
   }
-  game.comboDecay = 4;
+
+  Storage.data.lifetimePops = (Storage.data.lifetimePops || 0) + 1;
+  advanceMissions('pop', 1);
   game.shotsHit++;
-  if (source && 'didHit' in source) source.didHit = true;
-  AudioSys.pop(ball.size, ball.type);
+
+  // ---------- Sound: sampled pop + one note of the chain melody ----------
+  AudioSys.pop(sz, ball.type, kind !== 'shot');
+  AudioSys.popNote(game.combo, sz);
+
   // First-pop is the most important conversion signal: "the player got to
   // gameplay AND took a successful action." Emit at most once per session.
   if (!game.sessionFirstPopEmitted) {
     game.sessionFirstPopEmitted = true;
     emit('first_pop', { mode: game.mode, level: game.levelIndex });
-    // Visual celebration: only fires the very first time this player ever pops
-    // a ball, persisted across sessions so returning players aren't pestered.
     if (!Storage.data.firstPopCelebrated) {
       Storage.data.firstPopCelebrated = true;
       Storage.save();
-      game.floatingTexts.push(new FloatingText(W/2, H/2 - 30, 'FIRST POP!', '#ffd60a', 56));
-      game.floatingTexts.push(new FloatingText(W/2, H/2 + 14, 'nice — keep popping', '#fff', 18, 'ui'));
-      // Bigger, brighter shockwave centered on the ball + a softer one in the
-      // middle of the screen so the moment reads from anywhere on the canvas.
+      banner(game, 'FIRST POP!', 'keep popping to build a chain', '#ffd60a', 44, 1.6);
       game.shockwaves.push(new Shockwave(ball.x, ball.y, 160, '#ffd60a', 0.55));
-      game.shockwaves.push(new Shockwave(W/2, H/2 - 10, 220, '#fff', 0.7));
-      game.flash = Math.max(game.flash, 0.35);
+      game.flash = Math.max(game.flash, 0.3);
       AudioSys.firstPop();
     }
   }
 
-  // Pop feedback scales with ball size.
+  // ---------- Pop feedback ----------
   const palette = BALL_COLORS[ball.type] || BALL_COLORS.normal;
-  const color     = palette[0];
-  const colorDark = palette[1];
-  const sz = ball.size;
-  // Burst — primary spark spray, biased upward for a satisfying upward arc.
-  const burstCount = 10 + sz * 7;
-  const burstMaxSpeed = 180 + sz * 32;
-  const burstSize = 4 + sz * 2;
-  const burstLifeMin = 0.3 + sz * 0.05;
-  const burstLifeMax = 0.55 + sz * 0.08;
-  for (let i = 0; i < burstCount; i++) {
+  const color = palette[0], colorDark = palette[1];
+  // Membrane burst: the ball's own outline tearing apart.
+  game.bursts.push(new PopBurst(ball.x, ball.y, ball.r, color, colorDark, ball.type === 'hexagon'));
+  // Spark spray — streaks with drag, so they snap out fast and hang.
+  const quiet = kind === 'cascade' || kind === 'arc';
+  const sparkN = Math.round((6 + sz * 4) * (quiet ? 0.6 : 1));
+  for (let i = 0; i < sparkN; i++) {
     const a = Math.random() * Math.PI * 2;
-    const s = rand(60, burstMaxSpeed);
-    // Upward bias on the vertical component — explosions read better when
-    // sparks favor going up before gravity pulls them down.
-    const vy = Math.sin(a) * s - rand(0, 80);
-    game.particles.push(new Particle(
-      ball.x, ball.y,
-      Math.cos(a) * s, vy,
-      rand(burstLifeMin, burstLifeMax), color, burstSize, 140,
-    ));
+    const s = rand(180, 380 + sz * 60);
+    game.particles.push(new Particle(ball.x + Math.cos(a) * ball.r * 0.5, ball.y + Math.sin(a) * ball.r * 0.5,
+      Math.cos(a) * s, Math.sin(a) * s - 40, rand(0.22, 0.42 + sz * 0.04), i % 3 === 0 ? '#fff' : color, 4 + sz, 260, 3.4, true));
   }
-  // Fragment shards — larger, slower-drifting chunks in the dark palette
-  // color. Reads as "broken ball pieces" rather than sparks. Count scales
-  // gently with size so tiny pops stay tidy.
-  const shardCount = 4 + sz * 3;
-  for (let i = 0; i < shardCount; i++) {
-    const a = (i / shardCount) * Math.PI * 2 + rand(-0.3, 0.3);
-    const s = rand(80, 180 + sz * 20);
-    game.particles.push(new Particle(
-      ball.x, ball.y,
-      Math.cos(a) * s, Math.sin(a) * s - rand(40, 100),
-      rand(0.55, 0.85), colorDark, burstSize + 2, 240,
-    ));
+  // Droplets — the liquid inside, falling under gravity.
+  const dropN = Math.round((3 + sz * 2) * (quiet ? 0.5 : 1));
+  for (let i = 0; i < dropN; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const s = rand(60, 170 + sz * 20);
+    game.particles.push(new Particle(ball.x, ball.y, Math.cos(a) * s, Math.sin(a) * s - rand(60, 140),
+      rand(0.4, 0.75), i % 2 ? color : colorDark, 5 + sz * 1.5, 620));
   }
-  // Double-ring shockwave — outer in ball color, inner in white. The white
-  // ring gives the pop a sharp "flashbulb" feel at the impact center.
-  game.shockwaves.push(new Shockwave(ball.x, ball.y, 46 + sz * 24, color, 0.28 + sz * 0.04));
-  game.shockwaves.push(new Shockwave(ball.x, ball.y, 24 + sz * 14, '#ffffff', 0.18 + sz * 0.02));
-  // Floor-dust puff — only if the pop happened near the floor. Adds a kicked-
-  // up cloud of dust at ground level so floor-hugging pops feel grounded.
-  if (ball.y > 380) {
+  game.shockwaves.push(new Shockwave(ball.x, ball.y, 34 + sz * 22, color, 0.24 + sz * 0.03));
+  // Type signatures — each material leaves a different mark.
+  if (ball.type === 'lava') {
+    for (let i = 0; i < 6; i++) game.particles.push(new Particle(ball.x + rand(-ball.r, ball.r) * 0.5, ball.y, rand(-40, 40), rand(-160, -60), rand(0.5, 0.9), i % 2 ? '#ffd60a' : '#ff7733', 4, -60));
+  } else if (ball.type === 'armored') {
     for (let i = 0; i < 6; i++) {
+      const a = Math.random() * Math.PI * 2, s = rand(140, 300);
+      game.particles.push(new Particle(ball.x, ball.y, Math.cos(a) * s, Math.sin(a) * s - 80, rand(0.5, 0.8), i % 2 ? '#e9eef5' : '#6b737b', 7, 700));
+    }
+  } else if (ball.type === 'sludge') {
+    for (let i = 0; i < 5; i++) game.particles.push(new Particle(ball.x, ball.y, rand(-120, 120), rand(-200, -40), rand(0.5, 0.8), '#9be15d', 8, 800));
+  }
+  // Floor-dust puff — only if the pop happened near the floor.
+  if (ball.y > 400 && !quiet) {
+    for (let i = 0; i < 5; i++) {
       const a = -Math.PI + Math.random() * Math.PI;
       const s = rand(40, 110);
-      game.particles.push(new Particle(
-        ball.x + rand(-12, 12),
-        Math.min(ball.y + ball.r, 484),
-        Math.cos(a) * s * 0.6, Math.sin(a) * s * 0.4 - 30,
-        rand(0.35, 0.55), '#d8c9a8', 5, 90,
-      ));
+      game.particles.push(new Particle(ball.x + rand(-12, 12), Math.min(ball.y + ball.r, 484),
+        Math.cos(a) * s * 0.6, Math.sin(a) * s * 0.4 - 30, rand(0.35, 0.55), '#d8c9a8', 5, 90));
     }
   }
+  for (const p of game.getLivingPlayers()) p.cheer();
 
-  // Combo milestone: every 5 combo, big floating text + chime + radial flash.
-  // This is the moment the launch-pack listing copy is promising
-  // ("chain pops for big combos") — it must read as a screen-wide payoff,
-  // not a small tooltip.
+  // ---------- Electric: the charge jumps to the nearest ball ----------
+  if (ball.type === 'electric') arcFrom(game, ball);
+
+  // ---------- Chain milestones ----------
   if (prevCombo < game.combo) {
-    const milestone = game.combo === 5 ? 1 : game.combo === 10 ? 2 : game.combo === 15 ? 3 : game.combo === 20 ? 4 : 0;
+    const c = game.combo;
+    const milestone = c === 5 ? 1 : c === 10 ? 2 : c === 15 ? 3 : c === 20 ? 4 : c === 30 ? 5 : c === 40 ? 6 : 0;
     if (milestone > 0) {
-      const label = ['', 'NICE!', 'WILD!', 'INSANE!', 'GODLIKE!'][milestone];
-      const tint  = ['', '#ffd60a', '#ff7f50', '#ff36c4', '#9be7ff'][milestone];
-      // Size and screen punch scale with the milestone tier so the player feels
-      // the music swelling as they chain more.
-      const titleSize = 44 + milestone * 8;          // 52, 60, 68, 76
-      const subtitleSize = 18 + milestone * 2;       // 20, 22, 24, 26
-      game.floatingTexts.push(new FloatingText(W/2, H/2 - 36, label, tint, titleSize));
-      game.floatingTexts.push(new FloatingText(W/2, H/2 + 18, game.combo + ' COMBO', '#fff', subtitleSize));
-      // Centered shockwave so the eye is drawn to the middle of the screen
-      // for the milestone moment, and a screen flash for the bigger tiers.
-      game.shockwaves.push(new Shockwave(W/2, H/2 - 10, 180 + milestone * 40, tint, 0.45 + milestone * 0.05));
-      game.flash = Math.max(game.flash, 0.12 + milestone * 0.05);
-      game.shake = Math.max(game.shake, 4 + milestone * 2);
-      // Hit-stop boost — escalates with the milestone tier. tier 1 = 100ms,
-      // tier 4 = 220ms. Stacks with the per-pop tier above via Math.max.
-      game.hitPause = Math.max(game.hitPause, 0.06 + milestone * 0.04);
-      // Medal callout — slides in from the right with tier color so the
-      // player has a persistent visual marker of the achievement (the
-      // world-space floating text fades quickly; the medal hangs for ~3s).
-      const medalTier = (['silver', 'gold', 'plat', 'mythic'] as const)[milestone - 1];
-      FX.medal(label.replace('!', ''), game.combo + ' chain', medalTier, '+' + Math.round(gained));
-      // Top-center toast for the biggest tiers — gives the moment a second
-      // beat of UI feedback. Only fires for milestones 3+ (INSANE / GODLIKE)
-      // so we don't spam toasts on every 5-chain.
+      const label = ['', 'NICE!', 'WILD!', 'INSANE!', 'GODLIKE!', 'UNREAL!', 'POP GOD!'][milestone];
+      const tint  = ['', '#ffd60a', '#ff7f50', '#ff36c4', '#9be7ff', '#b9ff66', '#ffffff'][milestone];
+      banner(game, label, c + ' CHAIN  ·  ×' + chainMult(c).toFixed(1), tint, 30 + milestone * 3, 0.9);
+      game.shockwaves.push(new Shockwave(W / 2, 158, 150 + milestone * 30, tint, 0.45));
+      game.flash = Math.max(game.flash, 0.08 + milestone * 0.03);
+      game.shake = Math.max(game.shake, 3 + milestone * 1.5);
+      game.hitPause = Math.max(game.hitPause, 0.05 + milestone * 0.02);
       if (milestone >= 3) {
-        FX.toast('success', label.replace('!', ''), 'Combo chain of ' + game.combo);
+        const medalTier = (['gold', 'plat', 'mythic', 'mythic'] as const)[milestone - 3];
+        FX.medal(label.replace('!', ''), c + ' chain', medalTier, '×' + chainMult(c).toFixed(1));
       }
-      // Mega crit visual on the highest tier — chromatic-aberration flash
-      // sells "this is a screen-wide moment" in addition to the existing
-      // shake/flash. Restricted to GODLIKE only so it stays meaningful.
-      if (milestone === 4) FX.chromAb();
-      AudioSys.comboHit(milestone);
-    } else if (game.combo >= 2 && game.combo <= 4) {
-      // Early-chain rising tick — combos 2-4 previously had NO celebration at
-      // all (just the HUD chip), leaving a flat dead zone between "first pop"
-      // and the combo-5 fanfare. The climbing pitch makes the streak audible
-      // from the second pop onward.
-      AudioSys.comboTick(game.combo);
+      if (milestone >= 4) FX.chromAb();
+      AudioSys.comboHit(Math.min(4, milestone));
     }
   }
 
-  // ---------- Panic-mode Star/Flash specials ----------
-  // Star Bubbles are popped instead of split. The face on the bubble dictates
-  // the effect: Clock → universal freeze (~6 s), Star → full-screen wipe with
-  // a big score grant. Mirrors Pang Panic Mode's Star Bubble exactly.
-  if (ball.type === 'star') {
-    if (ball.starMode === 0) {
-      game.freezeTime = Math.max(game.freezeTime, 6);
-      game.floatingTexts.push(new FloatingText(ball.x, ball.y - 30, 'TIME FREEZE!', '#9be7ff', 22));
-      game.shockwaves.push(new Shockwave(ball.x, ball.y, 200, '#9be7ff', 0.45));
-    } else {
-      // Star face: clear the screen and dump the points into the Panic gauge.
-      let wiped = 0;
-      for (const b of game.balls) {
-        if (b !== ball && !b.dead) { wiped++; b.dead = true; }
-      }
-      const sweep = wiped * 100;
-      game.addScore(sweep);
-      game.panicGauge = Math.min(game.panicGaugeMax, game.panicGauge + wiped);
-      game.floatingTexts.push(new FloatingText(ball.x, ball.y - 30, 'SCREEN CLEAR! +' + sweep, '#ffd60a', 22));
-      game.flash = 0.6;
-      game.shake = 24;
-      game.shockwaves.push(new Shockwave(W/2, H/2, 380, '#ffd60a', 0.7));
-    }
-    ball.dead = true;
-    game.hitPause = 0.06;
-    return;
-  }
   // Flashing micro-ball: popping the tagged size-0 child grants a brief
-  // arcade-style freeze. Score is the normal pop reward + small flash bonus.
+  // arcade-style freeze.
   if (ball.flashing && ball.size === 0) {
-    const freeze = 2.2;
-    game.freezeTime = Math.max(game.freezeTime, freeze);
+    game.freezeTime = Math.max(game.freezeTime, 2.2);
     game.addScore(300);
-    game.floatingTexts.push(new FloatingText(ball.x, ball.y - 18, 'TIME STOP!', '#9be7ff', 18));
+    AudioSys.sfx('panic/freeze_engage', 0.7);
+    const ft = new FloatingText(ball.x, ball.y - 22, 'TIME STOP!', '#9be7ff', 18);
+    game.floatingTexts.push(ft);
     game.shockwaves.push(new Shockwave(ball.x, ball.y, 100, '#9be7ff', 0.4));
   }
-  // Panic gauge: each pop fills the Rainbow Gauge a notch. Wave advances
-  // mid-fight when the gauge is full (in addition to the existing "screen
-  // empty" rule), matching Pang's continuous-wave Panic experience.
-  if (game.mode === 'panic') {
-    game.panicGauge = Math.min(game.panicGaugeMax, game.panicGauge + 1);
-  }
+  // Panic gauge: each pop fills the Rainbow Gauge a notch.
+  if (game.mode === 'panic') game.panicGauge = Math.min(game.panicGaugeMax, game.panicGauge + 1);
 
-  const children = ball.hit(game, source);
-  if (children) {
-    if (children.length > 0) {
-      AudioSys.split();
-      game.balls.push(...children);
-    }
-    ball.dead = true;
-  }
-  // Hit-stop tiering — bigger balls produce more pause, and the last
-  // ball on the board gets an extra kick so the "you cleared it!" beat
-  // lands. Combo milestones below already stack their own boost on top.
-  // Range without boosts: 30ms (size 0) → 78ms (size 4).
-  const lastBallBonus = isLastBall ? 0.04 : 0;
-  game.hitPause = Math.max(game.hitPause, 0.03 + ball.size * 0.012 + lastBallBonus);
+  // Hit-stop — bigger balls bite harder; chain-reaction pops barely pause so a
+  // cascade flows instead of stuttering.
+  const stop = kind === 'shot' ? 0.028 + sz * 0.012 + (isLastBall ? 0.05 : 0) : 0.012;
+  game.hitPause = Math.max(game.hitPause, stop);
+  if (kind === 'shot') game.shake = Math.max(game.shake, 1.5 + sz * 1.2);
 
   // "Last one!" bullet-time — when this pop leaves exactly one ball alive,
-  // give a brief slow-mo beat (once per level) so the closing moment of a
-  // stage reads as a cinematic finish line instead of blending into the
-  // mid-level chaos. Skipped in Panic (waves refill instantly) and on boss
-  // levels (the boss keeps spawning balls, so "last" is meaningless there).
+  // a brief slow-mo beat (once per level) marks the finish line.
   if (!game.lastBallSlowmo && !game.bossLevel && game.mode !== 'panic') {
-    const remaining = game.balls.filter(b => !b.dead).length;
-    if (remaining === 1) {
+    const remaining = game.balls.filter(b => !b.dead && b !== ball).length + childCount;
+    if (remaining === 1 && game.levelPops > 2) {
       game.lastBallSlowmo = true;
-      game.slowTime = Math.max(game.slowTime, 0.65);
-      game.floatingTexts.push(new FloatingText(W / 2, 150, 'LAST ONE!', '#ffd60a', 30));
+      game.slowTime = Math.max(game.slowTime, 0.6);
+      pushText(game.floatingTexts, new FloatingText(W / 2, 150, 'LAST ONE!', '#ffd60a', 28), 'last', 0.9);
     }
   }
 
-  // Title-unlock detection. Most pops won't unlock anything — newlyEarnedTitles
-  // returns [] in steady state — so this is cheap. When something DOES unlock,
-  // fire a mythic-tier medal callout (the highest-prestige tier) AND a top-
-  // center toast — title unlocks are the rarest moments of the game and
-  // deserve maximum UI flair. The existing world-space floating text is
-  // kept as well so the player sees it AT the pop location too.
+  // Title-unlock detection. newlyEarnedTitles returns [] in steady state.
   const newTitles = newlyEarnedTitles();
   if (newTitles.length > 0) {
-    const t = newTitles[0]; // priority-ordered already
-    game.floatingTexts.push(new FloatingText(W/2, H/2 - 40, 'TITLE UNLOCKED', '#9be7ff', 16));
-    game.floatingTexts.push(new FloatingText(W/2, H/2 - 8,  t.label.toUpperCase(), '#ffd60a', 32));
-    const last = game.floatingTexts[game.floatingTexts.length - 1];
-    last.life = 2.0; last.maxLife = 2.0;
-    const second = game.floatingTexts[game.floatingTexts.length - 2];
-    second.life = 2.0; second.maxLife = 2.0;
+    const t = newTitles[0];
     FX.medal(t.label, 'New title earned', 'mythic', 'TITLE');
     FX.toast('info', 'TITLE UNLOCKED', t.label);
-    AudioSys.firstPop(); // reuse the bigger-than-combo fanfare — it sounds right
+    AudioSys.sfx('combo/title_unlock', 0.9) || AudioSys.firstPop();
     markTitlesSeen(newTitles.map(n => n.id));
   }
+}
+
+/** Electric discharge: jump to the nearest eligible ball (or the boss) and
+ *  pop it a beat later. Fresh children are briefly grounded, so a spark walks
+ *  outward through the arena instead of looping inside one family. */
+export function arcFrom(game: Game, from: { x: number; y: number; id?: number }) {
+  let best: Ball | null = null;
+  let bestD = Infinity;
+  for (const b of game.balls) {
+    if (b.dead || b === from || b.arcImmune > 0 || b.popFuse >= 0 || b.type === 'star') continue;
+    const d = Math.hypot(b.x - from.x, b.y - from.y) - b.r;
+    if (d < ARC_RANGE && d < bestD) { bestD = d; best = b; }
+  }
+  const boss = game.boss;
+  if (boss && !boss.dead) {
+    const hit = boss.arcTarget(from.x, from.y, ARC_RANGE);
+    if (hit && hit.d < bestD) {
+      game.bolts.push(new Bolt(from.x, from.y, hit.x, hit.y, '#ffe14a', 4, 0.26));
+      boss.onArc(game, hit.x, hit.y);
+      AudioSys.zap();
+      return;
+    }
+  }
+  if (!best) return;
+  game.bolts.push(new Bolt(from.x, from.y, best.x, best.y));
+  best.popFuse = 0.1;
+  best.popFuseKind = 'arc';
+  best.hitFlash = 0.1;
+  AudioSys.zap();
+}
+
+/** Break a crate: score, debris, and whatever it was holding. */
+export function breakCrate(game: Game, d: Destructible) {
+  if (d.dead) return;
+  d.dead = true;
+  AudioSys.sfx('hazard/destructible_break', 0.8) || AudioSys.pop();
+  game.addScore(100);
+  const cx = d.x + d.w / 2, cy = d.y + d.h / 2;
+  if (d.contains) game.pickups.push(new Pickup(cx, cy, d.contains));
+  for (let i = 0; i < 12; i++) {
+    const a = Math.random() * Math.PI * 2, s = rand(80, 240);
+    game.particles.push(new Particle(cx, cy, Math.cos(a) * s, Math.sin(a) * s - 80, rand(0.4, 0.7), i % 2 ? '#b8742f' : '#7a4a1c', 7, 700));
+  }
+  game.shockwaves.push(new Shockwave(cx, cy, 44, '#f0c27a', 0.22));
 }
 
 export function explodeProjectile(game: Game, projectile: Projectile, x: number, y: number) {
   if (projectile.dead) return;
   projectile.dead = true;
   projectile.didHit = true;
-  AudioSys.explode();
-  game.flash = Math.max(game.flash, 0.18);
-  game.shake = Math.max(game.shake, 10);
+  AudioSys.explode(false);
+  game.flash = Math.max(game.flash, 0.14);
+  game.shake = Math.max(game.shake, 8);
   const radius = projectile.explosionRadius || 90;
-  for (let i = 0; i < 24; i++) {
+  game.shockwaves.push(new Shockwave(x, y, radius, '#ffb347', 0.35));
+  for (let i = 0; i < 22; i++) {
     const a = Math.random() * Math.PI * 2;
-    const s = rand(90, 260);
-    game.particles.push(new Particle(x, y, Math.cos(a) * s, Math.sin(a) * s, rand(0.35, 0.75), i % 2 ? '#ff5400' : '#ffd60a', 8, 180));
+    const s = rand(140, 400);
+    game.particles.push(new Particle(x, y, Math.cos(a) * s, Math.sin(a) * s, rand(0.3, 0.6), i % 2 ? '#ff5400' : '#ffd60a', 7, 140, 3, i % 2 === 0));
   }
   for (const b of game.balls) {
     if (b.dead) continue;
     const dx = b.x - x, dy = b.y - y;
-    if (dx * dx + dy * dy < (radius + b.r) * (radius + b.r)) popBall(game, b, projectile);
+    if (dx * dx + dy * dy < (radius + b.r) * (radius + b.r)) popBall(game, b, { kind: 'blast' });
   }
   for (const d of game.destructibles) {
     if (d.dead) continue;
     const cx = d.x + d.w / 2, cy = d.y + d.h / 2;
-    const dx = cx - x, dy = cy - y;
-    if (dx * dx + dy * dy < radius * radius) {
-      d.dead = true;
-      game.addScore(100);
-      if (d.contains) game.pickups.push(new Pickup(cx, cy, d.contains));
-    }
+    if ((cx - x) * (cx - x) + (cy - y) * (cy - y) < radius * radius) breakCrate(game, d);
   }
-  if (game.boss && !game.boss.dead) {
-    const dx = game.boss.x - x, dy = game.boss.y - y;
-    if (dx * dx + dy * dy < (radius + game.boss.r) * (radius + game.boss.r)) game.boss.hit(game, 4);
+  for (const sc of game.smokeClouds) {
+    if (Math.hypot(sc.x - x, sc.y - y) < radius + 40) sc.life = Math.min(sc.life, 0.25);
   }
-  game.hitPause = 0.06;
+  if (game.boss && !game.boss.dead) game.boss.onBlast(game, x, y, radius);
+  game.hitPause = Math.max(game.hitPause, 0.06);
 }
 
 export function killPlayer(game: Game, player: Player, reason: DeathReason = 'unknown', chargeLife = true) {
@@ -380,52 +448,43 @@ export function killPlayer(game: Game, player: Player, reason: DeathReason = 'un
     Haptics.damage();
     game.flash = 0.15;
     game.shake = 6;
+    game.shockwaves.push(new Shockwave(player.x, player.y - 24, 70, '#3a86ff', 0.3));
     for (let i = 0; i < 20; i++) {
-      const a = Math.random() * Math.PI * 2, s = rand(120, 250);
-      game.particles.push(new Particle(player.x, player.y - 24, Math.cos(a)*s, Math.sin(a)*s, 0.4, '#3a86ff', 5));
+      const a = Math.random() * Math.PI * 2, s = rand(160, 320);
+      game.particles.push(new Particle(player.x, player.y - 24, Math.cos(a) * s, Math.sin(a) * s, 0.4, '#3a86ff', 5, 0, 3, true));
     }
     return;
   }
   player.dead = true;
+  player.deathT = 0;
   game.lastDeathReason = reason;
+  game.levelDeaths++;
   AudioSys.hurt();
   Haptics.death();
   game.shake = 18; game.flash = 0.3;
-  for (let i = 0; i < 30; i++) {
-    const a = Math.random() * Math.PI * 2, s = rand(80, 220);
-    game.particles.push(new Particle(player.x, player.y - 24, Math.cos(a)*s, Math.sin(a)*s, 0.7, '#ff4d6d', 6, 200));
+  for (let i = 0; i < 26; i++) {
+    const a = Math.random() * Math.PI * 2, s = rand(120, 320);
+    game.particles.push(new Particle(player.x, player.y - 24, Math.cos(a) * s, Math.sin(a) * s, 0.6, i % 2 ? '#ff4d6d' : '#ffd60a', 6, 300, 2.5, i % 2 === 0));
   }
   // Chromatic-aberration flash — the strongest "ouch" signal we have.
-  // Reserved for genuine deaths (shield-break above already returned).
   FX.chromAb();
-  // Damage-flash overlay through the FX layer — the canvas-side `game.flash`
-  // already does a white tint; this adds a radial red vignette pulse on top.
   FX.damageFlash();
-  game.combo = 0;
+  endChain(game, true);
   // In co-op, a single shared event (e.g. the level timer hitting 0) can
   // kill every player in the same frame. That should still only cost the
-  // team ONE life, not one per player caught in the blast — otherwise a
-  // single timeout in 4P co-op could drain the whole life pool at once.
-  // Callers that kill a group of players for one shared reason pass
-  // chargeLife=false for all but the first victim.
+  // team ONE life, not one per player caught in the blast.
   if (chargeLife) game.lives--;
-  // Life-lost toast — informs the player how many lives remain. Suppressed
-  // on the final death since the GAME OVER screen takes over immediately
-  // and the toast would race with it.
   if (chargeLife && game.lives > 0) {
     FX.toast('danger', 'LIFE LOST', game.lives + ' remaining');
   }
-  // In co-op, lives are a shared pool, but the run must not end just
-  // because ONE teammate's death happened to be the one that drained the
-  // last life — that would take control away from still-standing
-  // teammates (i.e. "player 1 dies -> everyone dies too"). Only end the run
-  // once every player is actually down. Generalized across up to 4 players
-  // (not just a single fixed partner) so 3P/4P co-op shares the same rules.
+  // In co-op, lives are a shared pool, but the run must not end just because
+  // ONE teammate's death drained the last life. Only end the run once every
+  // player is actually down.
   const anyoneElseAlive = game.getAllPlayers().some(p => p !== player && !p.dead);
   if (game.lives <= 0 && !anyoneElseAlive) {
     emit('run.fail', { mode: game.mode, level: game.levelIndex, score: game.score, reason });
     advanceMissions('score', 1, game.score);
-    // Daily challenge: any failed run is still a logged attempt; go to the result screen.
+    // Daily challenge: any failed run is still a logged attempt.
     if (game.mode === 'daily') {
       recordDailyAttempt(game.score);
       game.dailyResultScore = game.score;
@@ -433,27 +492,43 @@ export function killPlayer(game: Game, player: Player, reason: DeathReason = 'un
       game.state = State.DAILY_RESULT;
       return;
     }
+    AudioSys.sfx('stinger/game_over', 0.9);
     game.state = State.GAME_OVER;
     game.saveRunBest();
   } else if (anyoneElseAlive) {
-    // Pang Adventures revive window: 10 seconds for a teammate to walk over
-    // the downed player to bring them back. After that, normal respawn —
-    // unless the shared life pool is already spent, in which case this
-    // player stays down for the rest of the run while their teammates keep
-    // playing.
+    // Revive window: 10 seconds for a teammate to reach the downed player.
+    // After that, normal respawn — unless the shared life pool is spent.
     if (game.lives > 0) {
       player.respawnTimer = 10.0;
-      game.floatingTexts.push(new FloatingText(player.x, player.y - 42,
-        'P' + player.playerNum + ' DOWN — REVIVE!', '#ff4d6d', 20));
+      pushText(game.floatingTexts, new FloatingText(player.x, player.y - 46,
+        'P' + player.playerNum + ' DOWN — RESCUE!', '#ff4d6d', 18), 'down' + player.playerNum, 1.6);
     } else {
       player.respawnTimer = 0;
-      game.floatingTexts.push(new FloatingText(player.x, player.y - 42,
-        'P' + player.playerNum + ' OUT OF LIVES', '#ff4d6d', 20));
+      pushText(game.floatingTexts, new FloatingText(player.x, player.y - 46,
+        'P' + player.playerNum + ' OUT OF LIVES', '#ff4d6d', 18), 'down' + player.playerNum, 1.6);
     }
   } else {
     game.state = State.PLAYER_DEAD;
     game.hitPause = 1.2;
   }
+}
+
+/** The chain timer ran out (or the player was hit). Banks nothing — score was
+ *  paid per pop — but marks the level as not a PERFECT CHAIN. */
+export function endChain(game: Game, silent = false) {
+  if (game.combo <= 0) return;
+  if (!silent) AudioSys.chainEnd(game.combo);
+  if (game.combo >= 10 && !silent) {
+    const p = game.getLivingPlayers()[0];
+    if (p) {
+      const ft = pushText(game.floatingTexts, new FloatingText(p.x, p.y - 70, 'CHAIN ' + game.combo + ' BANKED', '#cfd6df', 13), 'chainend', 0.9);
+      ft.rise = 24;
+    }
+  }
+  if (game.levelPops > 0) game.chainBroken = true;
+  game.combo = 0;
+  game.comboDecay = 0;
+  Storage.save();
 }
 
 export function clearLevel(game: Game) {
@@ -463,13 +538,22 @@ export function clearLevel(game: Game) {
   advanceMissions('level_clear', 1);
   advanceMissions('score', 1, game.score);
   game.flash = 0.3;
-  const timeBonus = Math.round(game.timer) * 30;
-  const accuracy = game.shotsFired > 0 ? (game.shotsHit / game.shotsFired) : 0;
-  const accuracyBonus = Math.round(accuracy * 1500);
-  const comboBonus = game.maxCombo * 50;
-  const noMissBonus = (game.shotsFired === game.shotsHit && game.shotsFired > 0) ? 2000 : 0;
-  const total = timeBonus + accuracyBonus + comboBonus + noMissBonus;
+  const dailyMult = game.modifier === 'double_score' ? 2 : 1;
+  // Clear bonuses. Every one of them is reachable with touch auto-fire:
+  // nothing here depends on NOT shooting.
+  const timeBonus = Math.round(game.timer) * 25;
+  const chainBonus = game.maxCombo * 60;
+  const styleBonus = (game.runTricks * 80 + game.runGrazes * 30) * dailyMult;
+  const flawlessBonus = game.levelDeaths === 0 ? 1000 : 0;
+  // PERFECT CHAIN: the whole stage in one unbroken chain.
+  const perfect = !game.chainBroken && game.levelPops >= 6 && game.levelDeaths === 0;
+  const perfectBonus = perfect ? 2000 : 0;
+  const total = timeBonus + chainBonus + styleBonus + flawlessBonus + perfectBonus;
   game.addScore(total);
+  if (perfect) {
+    banner(game, 'PERFECT CHAIN!', 'one unbroken chain  +' + perfectBonus, '#b9ff66', 40, 1.6);
+    Storage.data.perfectChains = (Storage.data.perfectChains || 0) + 1;
+  }
 
   // Daily run finishes via the daily result screen.
   if (game.mode === 'daily') {
@@ -497,15 +581,12 @@ export function clearLevel(game: Game) {
     game.unlockedLevel = Math.max(game.unlockedLevel, game.levelIndex + 1);
     Storage.data.unlockedLevel = game.unlockedLevel;
     Storage.save();
-    // Daily mission hooks tied to Tour clears specifically.
     if (newTier > 0) advanceMissions('medal', 1);
     if (improvedExisting) advanceMissions('score_improve', 1);
-    // Medal callout for the run's tier earned. The level-clear screen
-    // shows the full breakdown; this is the in-the-moment celebration.
-    // Bronze/silver/gold map directly to the existing medal tier values.
     if (newTier > 0) {
       const tierName = (['bronze', 'silver', 'gold'] as const)[newTier - 1];
-      const upgrade  = newTier > prevTier;
+      const upgrade = newTier > prevTier;
+      if (upgrade) AudioSys.sfx('stinger/new_medal_' + tierName, 0.9);
       FX.medal(
         upgrade ? 'NEW MEDAL' : 'MEDAL EARNED',
         L.name + ' — ' + tierName.toUpperCase(),
@@ -513,24 +594,17 @@ export function clearLevel(game: Game) {
         '+' + total,
       );
     }
-    // Level-clear toast for momentum — "WAVE CLEAR" feel from ricochet.
-    FX.toast('success', 'LEVEL CLEAR', L.name + ' +' + total);
   } else if (L && game.mode === 'score_attack') {
     const cur = Storage.data.bestTour[L.id] || 0;
     if (levelScore > cur) { Storage.data.bestTour[L.id] = levelScore; Storage.save(); }
-    FX.toast('success', 'STAGE CLEAR', '+' + total);
   }
 
-  // NEW COMBO BEST detection: compare this run's combo apex against the
-  // snapshot taken at level start (preRunMaxCombo). The actual lifetime
-  // counter is bumped live in popBall as the combo grows, so we can't
-  // compare to that — preRunMaxCombo is the frozen "before" value.
   const newComboBest = game.maxCombo > game.preRunMaxCombo && game.maxCombo >= 5;
   // The summary card shows THIS stage's earnings (levelScore), not the run
   // total — that's what the medal was judged on and what "Best" refers to.
   game.summary = {
     base: levelScore - total,
-    time: timeBonus, accuracy: accuracyBonus, combo: comboBonus, noMiss: noMissBonus,
+    time: timeBonus, chain: chainBonus, style: styleBonus, flawless: flawlessBonus, perfect: perfectBonus,
     total: levelScore,
     best: L ? (Storage.data.bestTour[L.id] || 0) : 0,
     tricks: game.runTricks,

@@ -11,6 +11,42 @@ export const BALL_BOUNCE  = [340, 410, 490, 570, 650];   // floor bounce velocit
 export const BALL_HSPEED  = [200, 165, 140, 115, 95];    // horizontal travel
 export const BALL_SCORE   = [200, 150, 100, 75, 50];
 
+// ---- Chain (combo) -------------------------------------------------------
+// The chain is purely time-based: every pop refreshes a window, and the chain
+// only ends when that window runs dry. A missed shot never breaks it — which
+// keeps touch auto-fire and manual fire on exactly the same scoring footing.
+// The window tightens as the chain grows, so long chains demand aggression.
+export const CHAIN_WINDOW_MAX = 3.0;     // seconds at chain 1
+export const CHAIN_WINDOW_MIN = 1.7;     // seconds at chain 30+
+/** Score multiplier for the current chain length: +0.5 every 5 pops, cap ×5. */
+export function chainMult(chain: number): number {
+  return 1 + Math.min(8, Math.floor(chain / 5)) * 0.5;
+}
+export function chainWindow(chain: number): number {
+  const k = Math.min(1, chain / 30);
+  return CHAIN_WINDOW_MAX + (CHAIN_WINDOW_MIN - CHAIN_WINDOW_MAX) * k;
+}
+
+// ---- PopShot meter -------------------------------------------------------
+// Charged by pops, tricks and grazes. When full, the next shot is a PopShot:
+// a piercing super-harpoon that makes every ball it touches burst all the way
+// down its family tree in one rippling cascade.
+export const POPSHOT_MAX = 100;
+export const POPSHOT_PER_POP = 3;
+export const POPSHOT_PER_TRICK = 7;
+export const POPSHOT_PER_GRAZE = 6;
+
+// ---- Dash ----------------------------------------------------------------
+export const DASH_TIME = 0.16;           // seconds of burst travel
+export const DASH_SPEED = 780;           // px/s during the burst (~125px)
+export const DASH_IFRAMES = 0.24;        // invulnerability from dash start
+export const DASH_COOLDOWN = 1.25;       // seconds from dash start to next dash
+
+// ---- Graze ---------------------------------------------------------------
+export const GRAZE_MARGIN = 15;          // px outside the hurtbox that counts
+export const GRAZE_COOLDOWN = 1.1;       // per-ball, seconds
+export const GRAZE_SCORE = 40;
+
 // Hexagons travel a touch faster horizontally and bounce slightly higher than
 // their round counterparts — homage to Super Pang's Exagon physics.
 export const HEX_HSPEED_MULT = 1.18;
@@ -76,11 +112,19 @@ export const DAILY_MODIFIERS = [
   { id: 'tiny_hurtbox',  label: 'TINY HURTBOX',  desc: 'You are a smaller target.' },
   { id: 'big_bubbles',   label: 'BIG BUBBLES',   desc: 'Every ball starts one size larger.' },
   { id: 'sudden_death',  label: 'SUDDEN DEATH',  desc: 'One life. No retries.' },
+  // Added with the systems overhaul — each one re-uses a world mechanic so the
+  // daily can remix any level into a genuinely different problem.
+  { id: 'windstorm',     label: 'WINDSTORM',     desc: 'Gusts shove every ball sideways.' },
+  { id: 'moon_bounce',   label: 'MOON BOUNCE',   desc: 'Low gravity. Everything hangs in the air.' },
+  { id: 'live_wires',    label: 'LIVE WIRES',    desc: 'Every ball is electric — pops arc to neighbours.' },
+  { id: 'overcharge',    label: 'OVERCHARGE',    desc: 'The PopShot meter fills three times faster.' },
+  { id: 'black_ice',     label: 'BLACK ICE',     desc: 'The floor is ice. You slide.' },
 ] as const;
 
 /** Why the player died. Surfaced to the player on the game-over screen so
  *  the loss is intelligible and "fair" rather than mysterious. */
-export type DeathReason = 'ball' | 'hazard' | 'crab' | 'boss' | 'timeout' | 'unknown';
+export type DeathReason = 'ball' | 'hazard' | 'crab' | 'boss' | 'timeout' | 'unknown'
+  | 'lava' | 'rock' | 'beam' | 'flame' | 'barrier' | 'blast';
 
 export const DEATH_REASON_TEXT: Record<DeathReason, string> = {
   ball:    'A bouncing ball reached you.',
@@ -89,6 +133,12 @@ export const DEATH_REASON_TEXT: Record<DeathReason, string> = {
   boss:    'The boss crushed you.',
   timeout: 'The timer ran out.',
   unknown: 'You were defeated.',
+  lava:    'You stepped on a lava patch.',
+  rock:    'A falling rock landed on you.',
+  beam:    'An energy beam caught you.',
+  flame:   'A flame vent flared under you.',
+  barrier: 'You touched a live barrier.',
+  blast:   'You were inside a bomb ball\'s blast core.',
 };
 
 export type BallType = keyof typeof BALL_COLORS;
@@ -100,6 +150,14 @@ export type DailyModifierId = (typeof DAILY_MODIFIERS)[number]['id'];
 // 'diagonal' — fires twin 45-degree harpoons (Sheila the Thief homage)
 export type WeaponType = 'harpoon' | 'double' | 'triple' | 'powerwire' | 'diagonal'
   | 'machinegun' | 'laser' | 'flame' | 'shotgun' | 'shuriken' | 'bomb';
+/** Friendly display names for the HUD and pickup callouts. */
+export const WEAPON_LABEL: Record<WeaponType, string> = {
+  harpoon: 'HARPOON', double: 'TWIN HARPOON', triple: 'TRIPLE HARPOON',
+  powerwire: 'POWER WIRE', diagonal: 'SPLIT BOLTS', machinegun: 'MACHINE GUN',
+  laser: 'RAIL LASER', flame: 'FLAMETHROWER', shotgun: 'SCATTER SHOT',
+  shuriken: 'RICOCHET STAR', bomb: 'STICKY BOMB',
+};
 export type PickupType = WeaponType | 'shield' | 'score' | 'life' | 'time'
   | 'slowtime' | 'freeze' | 'clearsmoke' | 'magnet' | 'combo' | 'dynamite';
 export type GameMode = 'tour' | 'score_attack' | 'panic' | 'daily' | 'boss_rush';
+export interface Rect { x: number; y: number; w: number; h: number; }

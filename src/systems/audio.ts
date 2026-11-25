@@ -53,7 +53,49 @@ const TIER_S_PRELOAD: string[] = [
   'combo/milestone_5_nice', 'combo/milestone_10_wild',
   'boss/hit_weak_point', 'hazard/explosion_large',
   'pickup/generic_collect', 'pickup/shield_break',
+  'pickup/weapon_capsule', 'combo/trick_close_call', 'combo/trick_air_pop',
+  'combo/multipop_double', 'combo/multipop_triple', 'hazard/explosion_small',
 ];
+
+/** World pop scales — semitone offsets within one octave. Every world plays
+ *  its chain in a different mode, so a long chain in the Arctic sounds unlike
+ *  one in the Volcano. Kept to five-note scales so any run of pops is consonant. */
+const POP_SCALES: Record<string, number[]> = {
+  beach:   [0, 2, 4, 7, 9],    // major pentatonic — bright
+  desert:  [0, 1, 4, 5, 7],    // phrygian-dominant fragment — heat haze
+  arctic:  [0, 2, 3, 7, 10],   // minor with a cold 7th
+  city:    [0, 3, 5, 7, 10],   // minor pentatonic — neon
+  volcano: [0, 3, 5, 6, 10],   // blues — the flat five smoulders
+  airship: [0, 2, 4, 6, 9],    // lydian colour — lift
+  boss:    [0, 1, 5, 6, 10],   // dissonant — danger
+};
+
+const WEAPON_SFX: Record<string, { id: string; variants?: boolean; vol: number }> = {
+  harpoon:    { id: 'weapon/harpoon_fire', variants: true, vol: 0.9 },
+  double:     { id: 'weapon/double_fire', variants: true, vol: 0.85 },
+  triple:     { id: 'weapon/triple_fire', variants: true, vol: 0.85 },
+  powerwire:  { id: 'weapon/grapple_fire', vol: 0.85 },
+  diagonal:   { id: 'weapon/diagonal_fire', variants: true, vol: 0.85 },
+  machinegun: { id: 'weapon/machinegun_fire', vol: 0.5 },
+  laser:      { id: 'weapon/laser_fire', vol: 0.9 },
+  flame:      { id: 'weapon/flame_start', vol: 0.5 },
+  shotgun:    { id: 'weapon/shotgun_fire', vol: 0.95 },
+  shuriken:   { id: 'weapon/shuriken_fire', variants: true, vol: 0.85 },
+  bomb:       { id: 'weapon/bomb_launch', vol: 0.9 },
+};
+
+const PICKUP_SFX: Record<string, string> = {
+  shield: 'pickup/shield', life: 'pickup/life', score: 'pickup/score_gem', time: 'pickup/time',
+  slowtime: 'pickup/slowtime', freeze: 'pickup/freeze', clearsmoke: 'pickup/clearsmoke',
+  magnet: 'pickup/magnet', combo: 'pickup/combo_boost', dynamite: 'pickup/dynamite',
+};
+
+/** Per-id "last played" timestamps for the anti-machine-gun limiter. */
+const _lastPlayed = new Map<string, number>();
+// ---------- Ambient bed ----------
+let _ambSrc: AudioBufferSourceNode | null = null;
+let _ambGain: GainNode | null = null;
+let _ambCurrent = '';
 
 const _buffers = new Map<string, AudioBuffer>();
 const _loading = new Map<string, Promise<AudioBuffer | null>>();
@@ -249,6 +291,199 @@ export const AudioSys = {
     return false;
   },
 
+  /** Play any asset id once, with a short per-id rate limit so a burst of
+   *  identical events can't stack into a harsh wall. Returns whether it played
+   *  (so callers can chain a procedural fallback with `||`). */
+  sfx(id: string, vol = 1, minGapMs = 45): boolean {
+    if (this.muted || this.cgMuted || !this.ctx) return false;
+    const now = performance.now();
+    const last = _lastPlayed.get(id) || 0;
+    if (now - last < minGapMs) return true;      // swallowed, but "handled"
+    if (!this._playId(id, vol)) return false;
+    _lastPlayed.set(id, now);
+    return true;
+  },
+
+  /** Tempo of the music bed. Gameplay nudges it: time-stop and slow-mo drag
+   *  it down, late boss phases and deep Panic waves push it up. Pitch is
+   *  preserved by the browser, so this reads as urgency, not a tape warp. */
+  setMusicRate(rate: number) {
+    if (!_musicEl) return;
+    const r = Math.max(0.5, Math.min(1.3, rate));
+    if (Math.abs(_musicEl.playbackRate - r) > 0.004) {
+      try { _musicEl.playbackRate = r; } catch { /* some browsers clamp */ }
+    }
+  },
+  /** Momentary music dip for big audiovisual beats (boss intro, PopShot). */
+  setMusicVolume(k: number) {
+    if (_musicEl) _musicEl.volume = MUSIC_VOL * Math.max(0, Math.min(1, k));
+  },
+
+  /** Looping per-world ambience under the music (surf, wind, city hum …).
+   *  Pass '' to stop. Lazy-loads; silent until the buffer arrives. */
+  ambient(theme: string) {
+    if (!this.ctx || !this.master) return;
+    if (this.muted || this.cgMuted) theme = '';
+    if (theme === _ambCurrent) return;
+    _ambCurrent = theme;
+    const ctx = this.ctx;
+    if (_ambSrc && _ambGain) {
+      const old = _ambSrc, og = _ambGain;
+      try { og.gain.setTargetAtTime(0, ctx.currentTime, 0.25); old.stop(ctx.currentTime + 1); } catch { /* already stopped */ }
+      _ambSrc = null; _ambGain = null;
+    }
+    if (!theme) return;
+    const id = `ambient/${theme}_loop`;
+    _loadOne(ctx, id).then(buf => {
+      if (!buf || _ambCurrent !== theme || !this.master) return;
+      const src = ctx.createBufferSource();
+      src.buffer = buf; src.loop = true;
+      const g = ctx.createGain();
+      g.gain.value = 0;
+      g.gain.setTargetAtTime(0.32, ctx.currentTime, 0.8);
+      src.connect(g).connect(this.master);
+      src.start();
+      _ambSrc = src; _ambGain = g;
+    });
+  },
+
+  /** The melodic half of a pop: one plucked note from the current world's
+   *  scale. `step` is the chain length, so a growing chain climbs the scale
+   *  and a cascade rips through it as an arpeggio. Quiet by design — it sits
+   *  on top of the sampled pop rather than replacing it. */
+  _scale: POP_SCALES.beach,
+  _lastNoteMs: 0,
+  setPopScale(theme: string) { this._scale = POP_SCALES[theme] || POP_SCALES.beach; },
+  popNote(step: number, size = 2) {
+    if (this.muted || this.cgMuted || !this.ctx || !this.master) return;
+    const now = performance.now();
+    if (now - this._lastNoteMs < 28) return;
+    this._lastNoteMs = now;
+    const sc = this._scale;
+    const n = Math.max(0, step - 1);
+    const octave = Math.min(2, Math.floor(n / sc.length));
+    // Past the top of the range the line keeps dancing in the upper octave
+    // instead of climbing into dog-whistle territory.
+    const deg = sc[n % sc.length];
+    const semis = deg + octave * 12;
+    const freq = 392 * Math.pow(2, semis / 12);          // root: G4
+    const t = this.ctx.currentTime;
+    const vol = 0.11 + Math.min(0.05, size * 0.012);
+    const osc = this.ctx.createOscillator();
+    const osc2 = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    osc.type = 'triangle'; osc2.type = 'sine';
+    osc.frequency.setValueAtTime(freq, t);
+    osc2.frequency.setValueAtTime(freq * 2, t);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(vol, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+    const g2 = this.ctx.createGain();
+    g2.gain.value = 0.35;
+    osc.connect(g); osc2.connect(g2).connect(g);
+    g.connect(this.master);
+    osc.start(t); osc2.start(t);
+    osc.stop(t + 0.24); osc2.stop(t + 0.24);
+  },
+
+  weaponFire(weapon: string) {
+    const w = WEAPON_SFX[weapon] || WEAPON_SFX.harpoon;
+    const ok = w.variants ? this._playVariant(w.id, w.vol) : this.sfx(w.id, w.vol, 35);
+    if (ok) return;
+    // Procedural stand-ins, one voice per weapon so they stay distinguishable
+    // even before (or without) the samples.
+    switch (weapon) {
+      case 'machinegun': this.beep(520, 0.035, 'square', 0.12, -200); break;
+      case 'laser':      this.beep(1400, 0.22, 'sawtooth', 0.2, -1100); break;
+      case 'shotgun':    this.noise(0.14, 1800, 0.35); break;
+      case 'bomb':       this.beep(240, 0.12, 'sine', 0.25, 160); break;
+      case 'shuriken':   this.beep(1500, 0.07, 'triangle', 0.14, 500); break;
+      case 'flame':      this.noise(0.1, 900, 0.1); break;
+      default:           this.beep(880, 0.06, 'square', 0.18, -400);
+    }
+  },
+  /** The PopShot: a rising charge-release. Deliberately the biggest weapon
+   *  sound in the game. */
+  popshotFire() {
+    this.sfx('weapon/laser_fire', 0.8);
+    this.beep(220, 0.5, 'sawtooth', 0.22, 1500);
+    this.beep(440, 0.4, 'triangle', 0.2, 1300);
+    this.noise(0.35, 2600, 0.22);
+  },
+  popshotReady() {
+    this.sfx('panic/rainbow_gauge_full', 0.8) || [523, 784, 1046, 1568].forEach((f, i) =>
+      setTimeout(() => this.beep(f, 0.12, 'triangle', 0.26), i * 60));
+  },
+  dash() {
+    this.noise(0.14, 2400, 0.16);
+    this.beep(300, 0.12, 'sine', 0.12, 500);
+  },
+  /** Near-miss tick. Pitch climbs with consecutive grazes. */
+  graze(streak: number) {
+    const f = 900 + Math.min(streak, 8) * 120;
+    this.beep(f, 0.05, 'sine', 0.13, 400);
+  },
+  zap() {
+    this.sfx('pop/flourish_electric', 0.6, 60) || this.beep(2200, 0.06, 'square', 0.16, -1400);
+  },
+  fuseLit() {
+    this.beep(700, 0.5, 'square', 0.07, 900);
+  },
+  bumper() {
+    this.sfx('bounce/platform_01', 0.5, 60);
+    this.beep(660, 0.07, 'triangle', 0.16, 500);
+  },
+  bounceSoft(kind: 'wall' | 'platform') {
+    if (this.muted || this.cgMuted || !this.ctx) return;
+    const now = performance.now();
+    if (now - this._lastBounceMs < 70) return;
+    this._lastBounceMs = now;
+    this._playVariant2(kind === 'wall' ? 'bounce/wall' : 'bounce/platform', 0.22);
+  },
+  /** Two-variant round robin (the wall/platform sets ship _01/_02 only). */
+  _playVariant2(prefix: string, vol: number): boolean {
+    const c = _variantCounters.get(prefix) ?? 0;
+    _variantCounters.set(prefix, c + 1);
+    return this._playId(`${prefix}_0${(c % 2) + 1}`, vol);
+  },
+  trick(id: string) {
+    const map: Record<string, string> = {
+      clutch: 'combo/trick_clutch', close_call: 'combo/trick_close_call',
+      air_pop: 'combo/trick_air_pop', bank_shot: 'combo/trick_bank_shot',
+    };
+    this.sfx(map[id] || 'combo/trick_air_pop', 0.55, 120) || this.beep(1320, 0.08, 'triangle', 0.16, 300);
+  },
+  multipop(n: number) {
+    const id = n <= 2 ? 'combo/multipop_double' : n === 3 ? 'combo/multipop_triple' : 'combo/multipop_mega';
+    this.sfx(id, 0.7) || this.beep(880 + n * 60, 0.14, 'triangle', 0.22, 300);
+  },
+  /** Sandstorm about to blow: a rising hiss. */
+  windWarn() {
+    this.noise(0.9, 900, 0.1);
+    this.beep(180, 0.9, 'sine', 0.06, 260);
+  },
+  windBlow() {
+    this.noise(2.4, 1400, 0.16);
+  },
+  /** Volcano rumble under an eruption. */
+  rumble() {
+    this.sfx('boss/warning_telegraph', 0.5);
+    this.noise(1.2, 160, 0.4);
+    this.beep(55, 1.0, 'sawtooth', 0.22, -15);
+  },
+  /** The chain timer ran out. A soft falling pair — a sigh, not a punishment. */
+  chainEnd(len: number) {
+    if (len < 5) return;
+    this.beep(520, 0.12, 'sine', 0.12, -160);
+    setTimeout(() => this.beep(390, 0.16, 'sine', 0.1, -120), 90);
+  },
+  pickupFor(type: string) {
+    const id = PICKUP_SFX[type];
+    if (id) { if (this.sfx(id, 0.85)) return; }
+    else if (this.sfx('pickup/weapon_capsule', 0.85)) return;
+    this.pickup();
+  },
+
   // ---------- Procedural primitives (kept as fallback) ----------
   /** Generic envelope tone */
   beep(freq, dur, type = 'square', vol = 0.4, slide = 0) {
@@ -296,9 +531,20 @@ export const AudioSys = {
    *    armored → metallic clank, bonus → chime, explosive → boom-tail.
    *  Variants are quieter than the base pop so the audio mix stays balanced and
    *  the dominant feedback is still the size-pitched core pop. */
-  pop(size: number = 2, type: string = 'normal') {
+  _popBurstMs: 0,
+  _popBurstN: 0,
+  pop(size: number = 2, type: string = 'normal', quiet = false) {
     const s = Math.max(0, Math.min(4, size));
-    const playedBase = this._playVariant(`pop/base_size${s}`, 1);
+    // Density control: during a cascade dozens of pops land within a few
+    // hundred ms. Each successive one in a burst is turned down, so the
+    // result is a rolling crackle with the melody on top — not a wall.
+    const now = performance.now();
+    if (now - this._popBurstMs > 220) this._popBurstN = 0;
+    this._popBurstMs = now;
+    this._popBurstN++;
+    const density = 1 / (1 + Math.max(0, this._popBurstN - 2) * 0.22);
+    const playedBase = this._playVariant(`pop/base_size${s}`, (quiet ? 0.6 : 1) * density);
+    if (quiet && this._popBurstN > 3) return;
     if (!playedBase) {
       const lo = 760 - s * 90;        // 760, 670, 580, 490, 400
       const hi = lo + 220;
@@ -398,10 +644,10 @@ export const AudioSys = {
     if (this._playId('stinger/player_dead', 0.9)) return;
     this.beep(160, 0.35, 'sawtooth', 0.45, -120);
   },
-  explode() {
-    if (this._playId('hazard/explosion_large', 0.95)) return;
-    this.noise(0.3, 600, 0.6);
-    this.beep(120, 0.3, 'sawtooth', 0.4, -60);
+  explode(big = true) {
+    if (this.sfx(big ? 'hazard/explosion_large' : 'hazard/explosion_small', big ? 0.95 : 0.8, 70)) return;
+    this.noise(0.3, 600, big ? 0.6 : 0.4);
+    this.beep(120, 0.3, 'sawtooth', big ? 0.4 : 0.25, -60);
   },
   bossHit() {
     if (this._playId('boss/hit_weak_point', 0.85)) return;
