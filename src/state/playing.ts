@@ -332,7 +332,38 @@ export function updatePlaying(game: Game, dt: number) {
 export function renderWorld(game: Game) {
   const ctx = game.ctx;
   const t = game.t;
-  drawBackground(ctx, game.theme, t);
+  // Parallax follows the (average) player position, eased so a dash reads as
+  // a smooth lean rather than a jolt. Off entirely for reduced motion.
+  const living = game.getLivingPlayers();
+  if (living.length && !Storage.data.reducedMotion) {
+    let ax = 0;
+    for (const p of living) ax += p.x;
+    const target = clamp((ax / living.length - W / 2) / (W / 2), -1, 1);
+    game.parallax += (target - game.parallax) * 0.08;
+  } else if (Storage.data.reducedMotion) {
+    game.parallax = 0;
+  }
+  drawBackground(ctx, game.theme, t, game.parallax);
+
+  // Ice floor: a glassy sheen band with drifting glints, so the surface that
+  // changes how you move also LOOKS different from every other floor.
+  if (game.iceFloor) {
+    const sheen = ctx.createLinearGradient(0, GROUND_Y, 0, GROUND_Y + 18);
+    sheen.addColorStop(0, 'rgba(255,255,255,0.75)');
+    sheen.addColorStop(0.25, 'rgba(190,235,255,0.42)');
+    sheen.addColorStop(1, 'rgba(190,235,255,0)');
+    ctx.fillStyle = sheen;
+    ctx.fillRect(WALL_L, GROUND_Y, WALL_R - WALL_L, 18);
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (let i = 0; i < 9; i++) {
+      const gx = WALL_L + 40 + ((i * 113 + t * 22) % (WALL_R - WALL_L - 80));
+      ctx.moveTo(gx, GROUND_Y + 5); ctx.lineTo(gx + 26, GROUND_Y + 5);
+    }
+    ctx.stroke();
+  }
 
   // Eruption glow — the sky flares for a beat when the volcano goes off.
   if (game.eruptFlash > 0) {

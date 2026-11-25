@@ -182,6 +182,7 @@ export const AudioSys = {
   },
   toggle() {
     this.muted = !this.muted;
+    if (!this.muted) this.sfx('ui/mute_toggle', 0.6);
     Storage.data.muted = this.muted;
     Storage.save();
     this._musicSync();

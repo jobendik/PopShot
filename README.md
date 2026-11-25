@@ -1,6 +1,6 @@
 # PopShot
 
-A TypeScript + Vite + HTML5 Canvas arcade game in the Pang / Buster Bros tradition. Pop, split, dodge, survive. Procedural art, asset-based audio with a procedural WebAudio fallback, no runtime dependencies, CrazyGames-ready.
+A TypeScript + Vite + HTML5 Canvas arcade game. **Pop. Split. Dodge. Survive.** It starts from the classic bouncing-ball formula and adds chains, a cascading super shot, a dash, elemental ball reactions, world mechanics and three bosses. Procedural art, asset-based audio with a procedural WebAudio fallback, no runtime dependencies, CrazyGames-ready.
 
 ## Scripts
 
@@ -16,44 +16,73 @@ Reconsider later only if development moves toward asset-heavy worlds, reusable s
 
 ## What's in the build
 
+### The loop
+- **Pop → split → dodge**, with constant-height arcade arcs you can learn to read.
+- **Chain** — every pop refreshes a timer ring; the chain multiplies score up to ×5. A missed shot never breaks it (so touch auto-fire and keyboard score on equal terms). Clear a stage in one unbroken chain for a **PERFECT CHAIN**.
+- **PopShot** — pops, tricks and near misses charge the gold bar under your bot. When it is full the next shot is a piercing lance that makes every ball it touches burst all the way down its family tree.
+- **Dash** — a short burst you cannot be hurt during (`Shift` / `S` / `↓`, gamepad bumpers, double-tap on touch). Dash *through* a ball for **PHASE**.
+- **Graze** — let a ball skim past you for score and PopShot charge.
+
 ### Modes
-- **Tour** — 24 hand-crafted levels across 6 worlds (beach → desert → arctic → city → volcano → airship) culminating in the Commander RIFT boss fight. Every world is 4 levels; the back half showcases the hexagon balls and the full bestiary (birds, red bird, dragon, ball-fish).
-- **Score Attack** — 3 lives, no continues, cycles Tour levels. Beat your best.
-- **Panic Mode** — endless waves with the **Rainbow Gauge** progress bar, periodic **Star Bubbles** (Clock-face freeze or Star-face screen-clear), and flashing time-stop micro-balls.
-- **Boss Rush** — every boss in sequence; no retries between fights. Best run + best score persisted.
-- **Daily Challenge** — one shared seeded level per UTC day with a rolled modifier (`double_score`, `no_pickups`, `tiny_hurtbox`, `big_bubbles`, `sudden_death`). Streak counter and copy-to-clipboard result share (no external share links — CrazyGames forbids them).
+- **Tour** — 27 stages: six worlds of four, and three bosses (King Globo after the Desert, VOLTA after the City, Commander RIFT at the end).
+- **Score Attack** — 3 lives across the whole Tour on one score. One optional rewarded continue per run where ads are available.
+- **Panic** — endless waves built from named recipes; every 4 waves the arena rotates to the next zone (a world backdrop plus that world's mechanic). Rainbow Gauge, Star Bubbles and time-stop micro-balls are all still here.
+- **Boss Rush** — all three bosses back to back; each one beaten restores a life.
+- **Daily Challenge** — one seeded stage per UTC day with a modifier. The seed drives the *bounces* too, so every player gets the same run. Ten modifiers: `double_score`, `no_pickups`, `tiny_hurtbox`, `big_bubbles`, `sudden_death`, `windstorm`, `moon_bounce`, `live_wires`, `overcharge`, `black_ice`.
 
-### Content
-- **10 ball types** — normal, electric, explosive, smoke, lava, sludge, armored, bonus, hexagon (Super Pang polygonal physics), star bubble (Panic-mode special).
-- **11 weapons** — harpoon, double, triple (Pang! 3), power wire / grapple (anchors to ceiling), diagonal (Sheila-style 45°), machine gun, laser, flamethrower, shotgun, shuriken, bomb.
-- **17 pickup types** — shield, extra life, time, slow-time, freeze, smoke-clear, magnet, combo booster, score gem, dynamite (shrinks every ball to size 0), plus all weapon capsules.
-- **Bestiary** — crab, dragon (friendly helper; kicking it triggers a localized helpful explosion), bird, red bird (guaranteed power-up drop), ball-fish — birds/ball-fish jam the player's weapons on contact for 3s.
-- **Hazards** — lava, slime, electric beams + barriers, flame vents, falling rocks with floor telegraph rings.
-- **Co-op** — optional local 2-player (`I/K/U` to join from desktop, `J/L` to move). Pang-Adventures-style **10-second revive window**: walk over a downed teammate to bring them back.
+### Worlds — one rule each
+| World | What changes |
+| --- | --- |
+| Beach | Nothing. The fundamentals. |
+| Desert | Sandstorm gusts shove balls sideways (streaks warn first). Bomb and electric balls arrive. |
+| Arctic | The floor is ice — you slide. Smoke, sludge, armored balls. |
+| City | Pinball bumpers kick balls and block shots. Hexagons, barriers, birds. |
+| Volcano | Eruptions rain rocks on a beat (rings show where). Vents, lava floors, the dragon. |
+| Airship | Deck fans blow balls sky-high. Everything at once. |
 
-### Feel & polish
-- Forgiving sub-visual hurtbox, hit-pause, screen shake, white-flash, fixed-timestep update loop.
-- Squash-and-stretch on floor bounce; altitude-modulated floor shadows; electric pre-discharge halo; falling-rock landing telegraph.
-- Combo system with decay; milestone fanfares at 5/10/15/20 (`NICE!` → `WILD!` → `INSANE!` → `GODLIKE!`).
-- Trick chips — `CLUTCH!`, `CLOSE CALL`, `AIR POP`, `BANK SHOT` — for skill expression.
-- Multi-pop chains consolidated into `DOUBLE POP` / `TRIPLE POP` / `MEGA POP` / `ULTRA POP` labels.
-- Per-size pop sound pitch, type-specific audio flourishes, mute toggle (`M`), reduced-motion accessibility toggle in the pause menu.
+### Balls and how they interact
+- **Electric** — drops a telegraphed bolt; when popped, its charge **arcs** to the nearest ball and pops that too.
+- **Bomb (explosive)** — never splits. Shoot it to light the fuse: everything in the dashed ring pops, anything just outside is shoved, smoke is blown away — and the red core knocks *you* out.
+- **Lava / sludge** — leave floor patches. Lava burns you and launches balls that land on it higher; slime slows you, makes balls hop low, and gives your treads grip on ice.
+- **Armored** — big ones need two hits (or one blast). **Smoke** fogs the view. **Hexagon** bounces on jagged, faster paths. **Bonus** drops a pickup.
 
-### Persistence & retention
-- Versioned save (`bba_save_v2`) with v1 migration. Cloud-mirror via the CrazyGames Data Module, merged on the higher-progress side per field.
-- Per-level bronze/silver/gold medals (`targetScore × {1.0, 1.25, 1.5}`) rendered on the level-select grid. Medals judge the score earned **on that level only**, so every medal is earnable by replaying the level directly from level select.
-- Daily streak counter on the main menu, welcome-back banner across days, idle-rotation hints on the title screen.
-- Titles system (Bubble Sage, Daily Devotee, Boss Slayer, Detonator, Marksman, world masters, etc.) computed on demand from save state.
+### Weapons
+Harpoon · Twin Harpoon (two wires out) · Trident (one volley of three) · Power Wire (anchors and survives three pops) · Split Bolts (45° pair, one wall bounce) · Machine Gun · Rail Laser (a sustained column that burns through platforms and bumpers) · Flamethrower · Scatter Shot · Ricochet Star (bounces off walls, ceiling and floor) · Bomb.
+
+### Bosses
+- **King Globo** — a colossal ball. Break it and it splits into two princes, then four squires. Spits balls; belly-flops when wounded.
+- **VOLTA** — its shield deflects every shot. Light the bomb balls it feeds into the arena so they burst beside it, then fire into the overload window.
+- **Commander RIFT** — three acts: open hull → shield + tractor beam that steals balls and hurls them → meltdown (platforms vaporised, gravity rifts).
+
+### Co-op
+Local 2–4 players (P2 on keyboard: `J`/`L` move, `I` fire, `O` dash; extra gamepads join P2–P4). Shared lives and PopShot meter. A downed teammate leaves a beacon for 10 seconds: reach them for a **RESCUE** (+500, and they get up where they fell). Pops from two players in one burst score as **TAG TEAM**.
+
+### Persistence
+- Versioned save, schema 3. Upgrading a schema-2 save remaps `unlockedLevel` for the two inserted boss stages, keeps every earned medal tier, clears per-stage best *scores* (the scoring model changed), and moves old mode bests to a `legacy` block that is still shown ("Classic") and still counts for titles. A stale cloud save goes through the same upgrade before it is merged.
+- Storage key is still `popshot_save_v2` (the key is a label; `schemaVersion` is the version).
 
 ### Platform integration
-- **CrazyGames SDK v3** wired through `src/systems/platform.ts`: `gameplayStart`/`Stop` on state transitions, `happytime` on personal-best, midgame ads only between Tour levels (skips first cleared level of session, 60s minimum spacing), rewarded "watch ad to continue" on Score Attack / Panic / Boss Rush game-over. Ad-lifecycle hook ducks audio + pauses gameplay while ads are on screen.
-- Touch UI: invisible half-screen hold zones (left half = move left, right half = move right) with always-on auto-fire, top-right pause. Multi-touch with finger-slide between zones. Portrait viewports rotate the stage 90° in place with inverse-mapped touch input.
-- No custom fullscreen button and no outbound links — the CrazyGames player chrome owns fullscreen, and external links are a rejection cause.
-- Graceful degradation: every SDK call is a safe no-op when the script is absent (local dev, adblock, offline).
+- **CrazyGames SDK v3** via `src/systems/platform.ts`: `gameplayStart`/`Stop` on state transitions, `happytime` on bests, midgame ads only between Tour stages (never the first clear of a session, 60 s minimum spacing), one rewarded continue per run in Score Attack / Panic / Boss Rush. The ad hook pauses play and suspends audio. Rewards are granted only on `adFinished`, exactly once, and only if the player is still on that game-over screen.
+- A run that used a continue still counts for local bests but is never submitted to the platform leaderboard.
+- Touch: invisible half-screen hold zones, always-on auto-fire, double-tap to dash (toggle in the pause menu). Portrait viewports rotate the stage.
+- No custom fullscreen button, no outbound links, no external requests besides the SDK.
+- Every SDK call is a safe no-op when the script is absent.
 
 ### Bundle
-- Code: ~255 KB raw / ~73 KB gzipped JS + ~17 KB gzipped CSS. Loads near-instantly; audio (SFX/music under `public/`) streams lazily with a Tier-S preload list and a procedural WebAudio fallback so nothing blocks first play.
-- Fonts (Bowlby One, Inter) are self-hosted woff2 under `public/fonts/` (OFL-licensed) — the game makes no external font/CDN requests.
+- ~330 KB raw / ~97 KB gzipped JS + ~17 KB gzipped CSS (was 255 / 72 before the systems overhaul). No runtime dependencies. Audio streams lazily with a preload list and a procedural WebAudio fallback.
+- Fonts (Bowlby One, Inter) are self-hosted woff2 under `public/fonts/` (OFL).
+
+## Testing and the simulator
+
+```bash
+npm test                      # build + Playwright: smoke, gameplay invariants, save migration, platform/ads
+node tools/sim.mjs --seeds 12 # bot sweep: clear rate, deaths, time, score percentiles per stage
+```
+
+- The fixed-timestep loop can be stepped directly (`game.update(1/60)`), so the tests simulate the whole Tour in under a second without rendering.
+- Debug hooks (`window.__game` …) exist in dev builds, and in production builds only when the page is opened with `?popdebug=1`.
+- `tools/bot.js` is a predictive dodge-and-shoot bot. It is a measuring stick, not a model of a human — see `DEVNOTES.md`.
+- If Playwright cannot find its bundled browser, point it at one: `PLAYWRIGHT_CHROMIUM_PATH=/path/to/chromium npm test`.
 
 ## Architecture
 
@@ -62,15 +91,19 @@ src/
 ├── main.ts                 # boot, SDK init, error handlers, first-visit auto-start
 ├── game.ts                 # Game orchestrator: entity arrays, lifecycle, main loop
 ├── constants.ts            # W/H/GRAVITY, ball/weapon/pickup/mode types, themes
-├── data/levels.ts          # 24 + 1 hand-crafted level definitions (data-driven)
-├── entities/               # Ball, Boss, Crab, Creature, Destructible, Hazard,
-│                           # Particle, Pickup, Platform, Player, Projectile
+├── data/levels.ts          # 27 hand-crafted stage definitions (data-driven)
+├── entities/               # Ball, Crab, Creature, Destructible, Hazard, Particle,
+│                           # Pickup, Platform, Player, Projectile, gadgets (Bumper,
+│                           # Fan, wind), bosses/ (base + Globo, Volta, Rift)
 ├── rendering/canvas.ts     # background, ambience layer, shared draw helpers
 ├── state/                  # per-state update()/render() — one file per State enum
 │                           # mainMenu, modeSelect, levelSelect, playing, pause,
 │                           # levelClear, gameOver, daily, infoScreens
-└── systems/                # analytics, audio, collisions, combat, daily, hud,
-                            # input, platform (CG SDK), storage, titles
+└── systems/                # analytics, audio, collisions, combat, daily, input,
+                            # panic (wave recipes + zones), platform (CG SDK),
+                            # rng (seeded gameplay RNG), storage, titles
+tools/                      # bot.js (test bot), sim.mjs (batch simulator)
+tests/                      # Playwright: smoke, gameplay, save, platform
 ```
 
 ## Local dev
@@ -99,4 +132,10 @@ The workflow in `.github/workflows/deploy-pages.yml` will build `dist/` and depl
 
 ## Status
 
-Launch-ready for the CrazyGames Basic Launch pipeline. Remaining work is operational rather than in-engine: confirming the provenance/licensing of the audio assets under `public/`, thumbnail/capsule art, real-device QA at iframe sizes 907×510 → 1366×768, listing copy submission, and review-feedback iteration.
+Playable end to end and covered by an automated regression suite. Still owed before a store submission — none of it can be done from a build machine:
+
+- **Human playtesting**, especially of difficulty, the dash on touch, and whether the new feedback is too loud.
+- **Listening to the mix.** The audio wiring was done blind (see `DEVNOTES.md`).
+- **Real devices** at CrazyGames iframe sizes (907×510 → 1366×768) and on phones, plus a real gamepad.
+- **Audio provenance** — see `CREDITS.md`: the source libraries are named, but the per-file mapping and licence texts are not in the repo.
+- Thumbnail / capsule art and listing copy.

@@ -154,6 +154,8 @@ export class Game {
   runToken = 0;
   /** Debug snapshot of the ball nearest the player at the last ball death. */
   lastDeathInfo: Record<string, unknown> | null = null;
+  /** Smoothed camera lean for background parallax, in [-1, 1]. */
+  parallax = 0;
   /** Sky-flare clock for a volcano eruption (1 → 0). */
   eruptFlash: number;
   /** Seed the current stage's gameplay RNG was started from. */
@@ -642,6 +644,7 @@ export class Game {
     this.boss = L.boss ? createBoss(L.boss) : null;
     this.state = State.PLAYING;
     AudioSys.setPopScale(L.theme);
+    if (this.introTimer > 0) AudioSys.sfx('stinger/level_intro_banner', 0.6);
 
     // Attach context to the CrazyGames feedback widget so any in-game user
     // reports include the moment they were in when something broke. No-op if

@@ -204,7 +204,12 @@ export function creditPop(game: Game, ball: Ball, source: PopSource, childCount 
   // Pops landing within a short window are announced as ONE label at their
   // centroid when the window closes (see playing.ts) — never one per ball.
   game.chainCount++;
-  game.chainTimer = 0.2;
+  // A multi-pop is "at once": direct hits get a FIXED 0.2 s window from the
+  // first pop, so a rapid-fire weapon can't stretch one window into an
+  // "ULTRA POP" just by holding the trigger. Chain reactions (arcs, blasts,
+  // cascades) do extend it — the reaction is the event.
+  if (game.chainCount === 1) game.chainTimer = 0.2;
+  else if (kind !== 'shot') game.chainTimer = Math.max(game.chainTimer, 0.18);
   game.chainCx = (game.chainCx * (game.chainCount - 1) + ball.x) / game.chainCount;
   game.chainCy = (game.chainCy * (game.chainCount - 1) + ball.y) / game.chainCount;
   if (kind === 'arc') game.chainArcs++;

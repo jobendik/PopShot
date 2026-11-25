@@ -115,6 +115,8 @@ export class Projectile {
    *  shots from a single weapon and render the cable along the actual path. */
   dirX: number;
   dirY: number;
+  /** Power Wire: pops left before an anchored wire snaps. */
+  charges: number;
   constructor(x, y, type, owner, dirX = 0, dirY = -1) {
     this.x = x; this.y = y; this.type = type; this.owner = owner;
     this.dead = false;
@@ -127,6 +129,7 @@ export class Projectile {
     this.explosionRadius = 0;
     this.anchored = false;
     this.anchorLife = 0;
+    this.charges = 1;
     this.dirX = dirX;
     this.dirY = dirY;
 
@@ -148,9 +151,10 @@ export class Projectile {
     } else if (type === 'laser') {
       this.tipY = CEILING_Y;
       this.startY = y;
-      this.w = 16;
-      this.life = 0.14;
-      // The rail stops at the first shot-blocking surface above the muzzle.
+      this.w = 18;
+      this.life = 0.3;           // a sustained burn, not a flash
+      // The rail is the one standard weapon that ignores cover: it burns
+      // straight through platforms and bumpers to the ceiling.
     } else if (type === 'flame') {
       this.vy = -380 - rand(0, 60);
       this.vx = rand(-30, 30);
@@ -180,6 +184,7 @@ export class Projectile {
       this.speed = 1050;
       this.w = 6;
       this.anchorLife = 14;             // hard cap: 14s anchored before fading
+      this.charges = 3;                 // an anchored wire survives three pops
     } else if (this.type === 'diagonal') {
       // Linear travelling shot along (dirX, dirY). Diagonal harpoons are short
       // bolts rather than ceiling-anchored cables.
@@ -222,17 +227,6 @@ export class Projectile {
       if (this.y < CEILING_Y || this.x < WALL_L || this.x > WALL_R) this.dead = true;
       else if (hitsPlatformRect(game, this.x, prevY, this.y, this.w, this.h || 10)) this.dead = true;
     } else if (this.type === 'laser') {
-      if (this.life === 0.14) {
-        // First tick: clip the beam at the lowest blocking surface above us.
-        let top = CEILING_Y;
-        for (const p of game.platforms) {
-          if (p.blocksShots && this.x >= p.x && this.x <= p.x + p.w && p.y + p.h <= this.startY) top = Math.max(top, p.y + p.h);
-        }
-        for (const b of game.bumpers) {
-          if (Math.abs(this.x - b.x) <= b.r && b.y < this.startY) top = Math.max(top, b.y + b.r);
-        }
-        this.tipY = top;
-      }
       this.life -= dt;
       if (this.life <= 0) this.dead = true;
     } else if (this.type === 'flame') {
@@ -395,6 +389,8 @@ export class Projectile {
   /** Most projectiles consume themselves on hit; laser/flame pierce.
    *  Grapples are consumed on hit too (the wire breaks), matching arcade Pang. */
   consumeOnHit() {
+    // An anchored Power Wire is a tripwire: it survives until its charges run out.
+    if (this.type === 'grapple' && this.anchored) return --this.charges <= 0;
     return !(this.type === 'laser' || this.type === 'flame' || this.type === 'shuriken' || this.type === 'popshot');
   }
 
@@ -461,7 +457,7 @@ export class Projectile {
       ctx.lineWidth = this.type === 'bullet' ? 1.4 : 1.2;
       roundRect(ctx, this.x - this.w / 2, this.y, this.w, this.h, 2, true, true);
     } else if (this.type === 'laser') {
-      const a = clamp(this.life / 0.14, 0, 1);
+      const a = clamp(this.life / 0.12, 0, 1);
       ctx.save();
       ctx.globalAlpha = a;
       // Outer glow → magenta beam → hot white core.
@@ -536,6 +532,12 @@ export class Projectile {
         ctx.strokeStyle = INK;
         ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(this.x, this.tipY, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        // One bead per remaining charge, strung along the wire.
+        ctx.fillStyle = '#fff';
+        for (let i = 0; i < this.charges; i++) {
+          const by = this.tipY + (this.startY - this.tipY) * (0.3 + i * 0.2);
+          ctx.beginPath(); ctx.arc(this.x, by, 3.2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        }
         const pulse = 0.5 + Math.abs(Math.sin(performance.now() / 220)) * 0.5;
         ctx.globalAlpha = fade * 0.45 * pulse;
         ctx.strokeStyle = PAL.cyan;

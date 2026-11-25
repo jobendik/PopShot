@@ -442,8 +442,8 @@ export class Player {
         break;
       case 'laser':
         game.projectiles.push(new Projectile(m.x, m.y, 'laser', this));
-        game.flash = Math.max(game.flash, 0.1);
-        fired(0.55); spend();
+        game.flash = Math.max(game.flash, 0.08);
+        fired(0.42); spend();
         break;
       case 'flame':
         this.flameActive = true;
@@ -460,7 +460,7 @@ export class Player {
           game.projectiles.push(p);
         }
         game.shake = Math.max(game.shake, 3);
-        fired(0.4); spend();
+        fired(0.32); spend();
         break;
       case 'shuriken':
         game.projectiles.push(new Projectile(m.x, m.y, 'shuriken', this));
@@ -479,13 +479,13 @@ export class Player {
       case 'harpoon':    this.weaponTime = 0; this.weaponAmmo = 0; break;
       case 'double':     this.weaponTime = 14; this.weaponAmmo = 0; break;
       case 'triple':     this.weaponTime = 12; this.weaponAmmo = 0; break;
-      case 'powerwire':  this.weaponTime = 0; this.weaponAmmo = 6;  break;   // fixed wires per pickup
+      case 'powerwire':  this.weaponTime = 0; this.weaponAmmo = 8;  break;   // fixed wires per pickup
       case 'diagonal':   this.weaponTime = 0; this.weaponAmmo = 14; break;   // paired bolts
       case 'machinegun': this.weaponTime = 0; this.weaponAmmo = 60; break;
-      case 'laser':      this.weaponTime = 0; this.weaponAmmo = 6;  break;
+      case 'laser':      this.weaponTime = 0; this.weaponAmmo = 10; break;
       case 'flame':      this.weaponTime = 0; this.weaponAmmo = 90; break;
       case 'shotgun':    this.weaponTime = 0; this.weaponAmmo = 8;  break;
-      case 'shuriken':   this.weaponTime = 0; this.weaponAmmo = 10; break;
+      case 'shuriken':   this.weaponTime = 0; this.weaponAmmo = 8;  break;
       case 'bomb':       this.weaponTime = 0; this.weaponAmmo = 5;  break;
     }
   }
@@ -503,8 +503,7 @@ export class Player {
       ctx.save();
       ctx.translate(px, py);
       ctx.rotate(t * 9 * (this.deathVx < 0 ? -1 : 1));
-      ctx.globalAlpha = clamp(1.3 - t, 0, 1);
-      drawBot(ctx, 0, 24, { facing: this.facing, t: this.animT, vx: 0, dist: this.dist, fireT: -1, cheerT: -1, pal, scale: ROBOT_SCALE, fear: 1, lookX: 0, lookY: -1 });
+      drawBot(ctx, 0, 24, { facing: this.facing, t: this.animT, vx: 0, dist: this.dist, fireT: -1, cheerT: -1, pal, scale: ROBOT_SCALE, fear: 1, lookX: 0, lookY: -1, alpha: clamp(1.3 - t, 0, 1) });
       ctx.restore();
       return;
     }
@@ -513,13 +512,13 @@ export class Player {
     // Dash afterimages — fading silhouettes strung out behind the burst.
     for (const g of this.ghosts) {
       if (g.life <= 0) continue;
-      ctx.save();
-      ctx.globalAlpha = (g.life / 0.22) * 0.38;
-      drawBot(ctx, g.x, this.y, { facing: this.facing, t: this.animT, vx: this.dashDir * 400, dist: this.dist, fireT: -1, cheerT: -1, pal, scale: ROBOT_SCALE });
-      ctx.restore();
+      drawBot(ctx, g.x, this.y, { facing: this.facing, t: this.animT, vx: this.dashDir * 400, dist: this.dist, fireT: -1, cheerT: -1, pal, scale: ROBOT_SCALE, alpha: (g.life / 0.22) * 0.34 });
+      ctx.globalAlpha = 1;
     }
-    // Invuln flicker (respawn grace only — a dash stays fully visible).
-    if (this.invuln > 0 && this.dashIframes <= 0 && Math.floor(this.invuln * 20) % 2 === 0) { return; }
+    // Respawn grace: the bot pulses translucent (never fully hidden — the
+    // player must always be able to find themselves, above all in the first
+    // second of a stage). A dash stays fully opaque.
+    const ghosted = this.invuln > 0 && this.dashIframes <= 0 && Math.floor(this.invuln * 12) % 2 === 0;
 
     // PopShot charged: a golden corona around the cannon, so a full meter is
     // readable without looking at the HUD.
@@ -540,7 +539,9 @@ export class Player {
       fireT: this.fireT, cheerT: this.cheerT,
       pal, scale: ROBOT_SCALE,
       lookX: this.lookX, lookY: this.lookY, fear: this.fear,
+      alpha: ghosted ? 0.45 : 1,
     });
+    ctx.globalAlpha = 1;
 
     // Charge + dash gauge — a thin arc under the treads. Gold segment is the
     // PopShot meter; the cyan pip below it is the dash (dim while recharging).

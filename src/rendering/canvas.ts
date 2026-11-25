@@ -1057,13 +1057,22 @@ function drawCeiling(ctx: CanvasRenderingContext2D, theme: ThemeName) {
 // function returns, so they always sit in front of the stage.
 // =====================================================================
 
-export function drawBackground(ctx, theme, t) {
+/** `parallax` is the camera lean in [-1, 1] (the player's side of the arena).
+ *  Each depth layer slides a little further than the one behind it, which is
+ *  enough to turn four flat cut-outs into a scene with depth. The largest
+ *  shift (13px) stays inside the 16px side walls, so no edge is ever exposed. */
+export function drawBackground(ctx, theme, t, parallax = 0) {
   drawSky(ctx, theme);
   drawCelestial(ctx, theme, t);
+  ctx.save();
+  ctx.translate(-parallax * 4, 0);
   drawFarLayer(ctx, theme, t);
+  ctx.translate(-parallax * 4, 0);
   drawMidLayer(ctx, theme, t);
   drawAmbience(ctx, theme, t);
+  ctx.translate(-parallax * 5, 0);
   drawNearLayer(ctx, theme, t);
+  ctx.restore();
   drawFloor(ctx, theme);
   drawWalls(ctx, theme);
   drawCeiling(ctx, theme);

@@ -40,36 +40,3 @@ export function updateModeSelect(game: Game) {
   }
 }
 
-export function renderModeSelect(game: Game) {
-  if (UI.isHandledByHtml(State.MODE_SELECT)) return;
-  const ctx = game.ctx;
-  drawBackground(ctx, 'desert', game.t);
-  ctx.font = 'bold 48px sans-serif';
-  ctx.fillStyle = '#fff'; ctx.strokeStyle = '#0a1832'; ctx.lineWidth = 5;
-  ctx.textAlign = 'center';
-  ctx.strokeText('SELECT MODE', W/2, 120);
-  ctx.fillText('SELECT MODE', W/2, 120);
-
-  for (let i = 0; i < MODE_ITEMS.length; i++) {
-    const sel = i === game.modeSelectIndex;
-    const y = 200 + i * 70;
-    ctx.fillStyle = sel ? 'rgba(255,214,10,0.2)' : 'rgba(0,0,0,0.3)';
-    roundRect(ctx, W/2 - 280, y - 30, 560, 56, 10, true, false);
-    ctx.font = 'bold 28px sans-serif';
-    ctx.fillStyle = sel ? '#ffd60a' : '#fff';
-    ctx.textAlign = 'left';
-    ctx.fillText((sel ? '▶ ' : '  ') + MODE_ITEMS[i].title, W/2 - 260, y);
-    ctx.font = '16px sans-serif';
-    ctx.fillStyle = '#cfd6df';
-    ctx.fillText(MODE_ITEMS[i].desc, W/2 - 260, y + 22);
-  }
-  ctx.textAlign = 'right';
-  ctx.font = '14px sans-serif';
-  ctx.fillStyle = '#cfd6df';
-  ctx.fillText('Best Score Attack: ' + Storage.data.bestScoreAttack, W - 24, H - 36);
-  ctx.fillText('Best Panic Wave: ' + Storage.data.bestPanicWave, W - 24, H - 18);
-  ctx.textAlign = 'center';
-  ctx.font = '14px sans-serif';
-  ctx.fillStyle = 'rgba(255,255,255,0.7)';
-  ctx.fillText('Esc back', W/2, H - 36);
-}

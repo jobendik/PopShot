@@ -228,9 +228,12 @@ export function resolveCollisions(game: Game) {
           }
           p.hitBalls.add(b);
           game._popBall(b, p);
-          if (p.type === 'grapple') AudioSys.sfx('weapon/grapple_break', 0.6);
-          if (p.type === 'shuriken' && p.hitBalls.size >= 4) { p.dead = true; break; }
-          if (p.consumeOnHit()) { p.dead = true; break; }
+          if (p.type === 'shuriken' && p.hitBalls.size >= 3) { p.dead = true; break; }
+          if (p.consumeOnHit()) {
+            p.dead = true;
+            if (p.type === 'grapple') AudioSys.sfx('weapon/grapple_break', 0.6);
+            break;
+          }
         }
       }
     }

@@ -65,74 +65,6 @@ export function updateLevelClear(game: Game) {
   if (consumeAnyConfirm()) advanceFromLevelClear(game);
 }
 
-export function renderLevelClear(game: Game) {
-  if (UI.isHandledByHtml(State.LEVEL_CLEAR)) return;
-  const ctx = game.ctx;
-  ctx.fillStyle = 'rgba(0,0,0,0.65)';
-  ctx.fillRect(0, 0, W, H);
-  ctx.font = 'bold 56px sans-serif';
-  ctx.fillStyle = '#ffd60a';
-  ctx.strokeStyle = '#0a1832'; ctx.lineWidth = 6; ctx.textAlign = 'center';
-  ctx.strokeText('LEVEL CLEAR!', W/2, 130);
-  ctx.fillText('LEVEL CLEAR!', W/2, 130);
-  const s = game.summary;
-  if (s) {
-    // Bonus rows. Tricks row only appears when the player actually pulled off
-    // CLUTCH / AIR POP / etc — otherwise the card stays at its original size.
-    const rows: [string, string][] = [
-      ['Base Score', '+' + s.base],
-      ['Time Bonus', '+' + s.time],
-      ['Chain Bonus', '+' + s.chain],
-      ['Style Bonus', '+' + s.style],
-      ['Flawless Bonus', '+' + s.flawless],
-    ];
-    if (s.tricks > 0) rows.push(['Tricks', '×' + s.tricks]);
-    // Compress row spacing when the optional tricks row is present so the
-    // total + best lines still fit cleanly above the bottom hint.
-    const rowSpacing = rows.length > 5 ? 30 : 36;
-    const rowsTopY   = rows.length > 5 ? 190 : 200;
-    ctx.font = '22px sans-serif';
-    ctx.textAlign = 'left';
-    for (let i = 0; i < rows.length; i++) {
-      const isTricks = rows[i][0] === 'Tricks';
-      ctx.fillStyle = isTricks ? '#ff36c4' : '#fff';
-      ctx.fillText(rows[i][0], W/2 - 180, rowsTopY + i * rowSpacing);
-      ctx.textAlign = 'right';
-      ctx.fillText(rows[i][1], W/2 + 180, rowsTopY + i * rowSpacing);
-      ctx.textAlign = 'left';
-    }
-    const totalY = rowsTopY + rows.length * rowSpacing + 20;
-    ctx.font = 'bold 28px sans-serif';
-    ctx.fillStyle = '#ffd60a';
-    ctx.fillText('TOTAL', W/2 - 180, totalY);
-    ctx.textAlign = 'right';
-    ctx.fillText(s.total.toString(), W/2 + 180, totalY);
-    ctx.font = '16px sans-serif';
-    ctx.fillStyle = '#cfd6df';
-    ctx.textAlign = 'center';
-    ctx.fillText('Best: ' + s.best, W/2, totalY + 30);
-    // NEW COMBO BEST! banner — pulses to draw the eye, sits below the
-    // best line so it doesn't compete with the total score.
-    if (s.newComboBest) {
-      const pulse = 1 + Math.sin(game.t * 6) * 0.04;
-      ctx.save();
-      ctx.translate(W/2, totalY + 60);
-      ctx.scale(pulse, pulse);
-      ctx.font = 'bold 22px sans-serif';
-      ctx.fillStyle = '#ff36c4';
-      ctx.strokeStyle = '#0a1832';
-      ctx.lineWidth = 4;
-      ctx.strokeText('★  NEW COMBO BEST!  ★', 0, 0);
-      ctx.fillText('★  NEW COMBO BEST!  ★', 0, 0);
-      ctx.restore();
-    }
-  }
-  ctx.font = '16px sans-serif';
-  ctx.fillStyle = game.awaitingAd ? '#ffd60a' : 'rgba(255,255,255,0.8)';
-  ctx.textAlign = 'center';
-  ctx.fillText(game.awaitingAd ? 'Loading ad…' : 'Press Enter / Space to continue', W/2, H - 30);
-}
-
 // ---------------- BOSS DEFEATED ----------------
 export function updateBossDefeated(game: Game, dt: number) {
   game.bossDefeatedTimer -= dt;
@@ -147,20 +79,6 @@ export function updateBossDefeated(game: Game, dt: number) {
   if (game.bossDefeatedTimer <= 0) game.levelClear();
 }
 
-export function renderBossDefeated(game: Game) {
-  if (UI.isHandledByHtml(State.BOSS_DEFEATED)) return;
-  const ctx = game.ctx;
-  ctx.fillStyle = 'rgba(0,0,0,0.45)';
-  ctx.fillRect(0, 0, W, H);
-  ctx.font = 'bold 54px sans-serif';
-  ctx.fillStyle = '#ffd60a';
-  ctx.strokeStyle = '#0a1832';
-  ctx.lineWidth = 6;
-  ctx.textAlign = 'center';
-  ctx.strokeText('BOSS DEFEATED!', W/2, H/2 - 10);
-  ctx.fillText('BOSS DEFEATED!', W/2, H/2 - 10);
-}
-
 // ---------------- VICTORY (after final boss / last level) ----------------
 export function updateVictory(game: Game) {
   if (consumeAnyConfirm() || consumePressed('Escape')) {
@@ -169,18 +87,3 @@ export function updateVictory(game: Game) {
   }
 }
 
-export function renderVictory(game: Game) {
-  if (UI.isHandledByHtml(State.VICTORY)) return;
-  const ctx = game.ctx;
-  ctx.fillStyle = 'rgba(0,0,0,0.7)';
-  ctx.fillRect(0, 0, W, H);
-  ctx.font = 'bold 72px sans-serif'; ctx.fillStyle = '#ffd60a'; ctx.textAlign = 'center';
-  ctx.strokeStyle = '#0a1832'; ctx.lineWidth = 6;
-  ctx.strokeText('VICTORY!', W/2, H/2 - 40);
-  ctx.fillText('VICTORY!', W/2, H/2 - 40);
-  ctx.font = '24px sans-serif'; ctx.fillStyle = '#fff';
-  ctx.fillText('Commander RIFT has fallen.', W/2, H/2 + 10);
-  ctx.fillText('Final Score: ' + game.score, W/2, H/2 + 44);
-  ctx.font = '18px sans-serif'; ctx.fillStyle = '#cfd6df';
-  ctx.fillText('Press Enter to return to menu', W/2, H - 40);
-}

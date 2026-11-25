@@ -66,7 +66,7 @@ export function buildPause(game: Game): HTMLElement {
   root.appendChild(card);
 
   card.querySelector<HTMLElement>('[data-role="resume"]')!.addEventListener('click', () => {
-    AudioSys.menu(); game.state = State.PLAYING;
+    AudioSys.sfx('stinger/pause_close', 0.7) || AudioSys.menu(); game.state = State.PLAYING;
   });
   card.querySelector<HTMLElement>('[data-role="restart"]')!.addEventListener('click', () => {
     AudioSys.menu(); restartCurrentRun(game);
@@ -77,6 +77,7 @@ export function buildPause(game: Game): HTMLElement {
   card.querySelector<HTMLElement>('[data-role="reduced"]')!.addEventListener('click', () => {
     AudioSys.menu();
     Storage.data.reducedMotion = !Storage.data.reducedMotion;
+    AudioSys.sfx(Storage.data.reducedMotion ? 'ui/toggle_on' : 'ui/toggle_off', 0.7);
     Storage.save();
   });
   card.querySelector<HTMLElement>('[data-role="mute"]')!.addEventListener('click', () => {

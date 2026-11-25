@@ -61,6 +61,7 @@ export interface RobotPose {
   lookX?: number;    // -1..1     eye tracks a point of interest (nearest threat)
   lookY?: number;    // -1..1
   fear?: number;     // 0..1      wide eye + pinprick iris when danger is close
+  alpha?: number;    // 0..1      overall opacity (afterimages, respawn pulse)
   pal?: RobotPalette;
   scale?: number;    // default 1
 }
@@ -248,6 +249,8 @@ function scarfTails(ctx: CanvasRenderingContext2D, kx: number, ky: number, pal: 
 export function drawBot(ctx: CanvasRenderingContext2D, x: number, groundY: number, pose: RobotPose): { x: number; y: number } {
   const pal = withDefaults(pose.pal ?? ROBOT_P2_PALETTE);
   const t = pose.t || 0, S = pose.scale || 1;
+  const A = pose.alpha ?? 1;
+  ctx.globalAlpha = A;
   const facing = pose.facing || 1, vx = pose.vx || 0, dist = pose.dist || 0;
   const env = fireEnv(pose.fireT);
   const speed = Math.abs(vx);
@@ -299,8 +302,8 @@ export function drawBot(ctx: CanvasRenderingContext2D, x: number, groundY: numbe
   if (speed > 4) {
     const dir = Math.sign(vx) || facing; ctx.fillStyle = 'rgba(245,235,210,.5)';
     for (let i = 0; i < 4; i++) { const p = ((t * 4 + i * 0.37) % 1), r = 2 + p * 5, dx = -dir * (sep / 2 + R + p * 22), dy = -2 - p * 8 * Math.sin(p * 3);
-      ctx.globalAlpha = (1 - p) * 0.5; circle(ctx, dx, dy, r); ctx.fill(); }
-    ctx.globalAlpha = 1;
+      ctx.globalAlpha = (1 - p) * 0.5 * A; circle(ctx, dx, dy, r); ctx.fill(); }
+    ctx.globalAlpha = A;
   }
 
   /* ============ TREAD UNIT (wide flat track) ============ */
@@ -371,7 +374,7 @@ export function drawBot(ctx: CanvasRenderingContext2D, x: number, groundY: numbe
   const cy0 = hy + hh - 8;
   const cg = ctx.createRadialGradient(0, cy0, 0, 0, cy0, 8 + coreBright * 4);
   cg.addColorStop(0, pal.core); cg.addColorStop(.4, pal.core); cg.addColorStop(1, 'rgba(70,224,255,0)');
-  ctx.globalAlpha = 0.3 + coreBright * 0.5; ctx.fillStyle = cg; circle(ctx, 0, cy0, 8 + coreBright * 4); ctx.fill(); ctx.globalAlpha = 1;
+  ctx.globalAlpha = (0.3 + coreBright * 0.5) * A; ctx.fillStyle = cg; circle(ctx, 0, cy0, 8 + coreBright * 4); ctx.fill(); ctx.globalAlpha = A;
   ctx.fillStyle = pal.core; ctx.strokeStyle = INK; ctx.lineWidth = 2; circle(ctx, 0, cy0, 3); ctx.fill(); ctx.stroke();
   ctx.fillStyle = 'rgba(255,255,255,.9)'; circle(ctx, -1, cy0 - 1, 1); ctx.fill();
 
