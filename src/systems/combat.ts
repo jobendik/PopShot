@@ -452,7 +452,9 @@ export function explodeProjectile(game: Game, projectile: Projectile, x: number,
 }
 
 export function killPlayer(game: Game, player: Player, reason: DeathReason = 'unknown', chargeLife = true) {
-  if (player.invuln > 0 || player.dead) return;
+  // Respawn grace AND dash i-frames protect against everything (a timeout
+  // clears both before it calls in — the clock is not dodgeable).
+  if (player.untouchable || player.dead) return;
   if (player.shield) {
     player.shield = false;
     player.invuln = 1.0;

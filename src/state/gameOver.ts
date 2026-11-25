@@ -57,7 +57,13 @@ export function updatePlayerDead(game: Game, dt: number) {
       game.floatingTexts = [];
     }
   }
-  // Still tick particles for visual continuity during the freeze.
+  // Still tick particles for visual continuity during the freeze — and the
+  // knockout tumble, which is the whole point of this beat.
+  for (const p of game.getAllPlayers()) if (p.dead && p.deathT >= 0) p.deathT += dt;
+  for (const bu of game.bursts) bu.update(dt);
+  for (const ft of game.floatingTexts) ft.update(dt);
+  game.bursts = game.bursts.filter(b => !b.dead);
+  game.floatingTexts = game.floatingTexts.filter(f => !f.dead);
   for (const pt of game.particles) pt.update(dt);
   for (const sw of game.shockwaves) sw.update(dt);
   game.particles = game.particles.filter(p => !p.dead);

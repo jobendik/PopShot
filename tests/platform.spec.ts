@@ -200,3 +200,11 @@ test('the build makes no external requests besides the SDK, and has no outbound 
   const fs = await page.evaluate(() => document.documentElement.innerHTML.includes('requestFullscreen'));
   expect(fs).toBe(false);
 });
+
+test('debug hooks are absent from a normal production page load', async ({ page }) => {
+  await page.route('**/sdk.crazygames.com/**', r => r.abort());
+  await page.goto('/');
+  await page.waitForFunction(() => document.body.dataset.state === 'playing' || document.body.dataset.state === 'main_menu');
+  const exposed = await page.evaluate(() => ['__game', '__keys', '__keysPressed', '__Storage', '__Platform', '__AudioSys', '__pickDaily'].filter(k => k in window));
+  expect(exposed).toEqual([]);
+});

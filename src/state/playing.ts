@@ -244,7 +244,14 @@ export function updatePlaying(game: Game, dt: number) {
   for (const b of game.balls) if (!b.dead) b.update(motionDt, game);
   for (const p of game.projectiles) p.update(dt, game);
   for (const pk of game.pickups) pk.update(dt, game);
-  for (const h of game.hazards) h.update(motionDt || (h.type === 'lava' || h.type === 'slime' ? 0 : dt), game);
+  // During a time-freeze the WORLD stops: telegraphs, vents, rocks and floor
+  // patches all hold (a boss's warning must never run out while the beam it
+  // announces is still frozen). Beams that are already live keep burning down
+  // so a freeze can't pin a lethal column in place.
+  for (const h of game.hazards) {
+    const live = h.type === 'electric_beam' || h.type === 'boss_beam';
+    h.update(live ? dt : motionDt, game);
+  }
   for (const pt of game.particles) pt.update(dt);
   for (const sw of game.shockwaves) sw.update(dt);
   for (const sc of game.smokeClouds) sc.update(dt);

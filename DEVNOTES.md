@@ -139,7 +139,19 @@ production build (local preview server).
   to things that are safe blind: wiring assets already made for those events,
   a rate limiter, a five-note pop scale per world, and tempo nudges.
 
-## 5. Known limits
+## 5. Bugs found in my own changes during review
+
+Caught by re-reading the diff, each now covered by a test:
+
+- Dash i-frames did not protect against a bomb ball's lethal core (the kill
+  path only checked respawn invulnerability).
+- During a time-freeze, boss warning columns kept counting down while the
+  boss's own timers were frozen — the warning vanished, then the beam landed
+  unannounced after the thaw. The world's telegraphs now freeze with it.
+- The knockout tumble did not animate in single-player (the death state never
+  advanced the clock that drives it).
+
+## 6. Known limits
 
 - No human playtesting, no physical phone, no gamepad, no real CrazyGames
   iframe. Touch was exercised in Chromium device emulation only.

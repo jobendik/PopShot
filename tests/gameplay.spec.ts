@@ -468,3 +468,68 @@ test('difficulty guard: the mortal bot clears World 1 cleanly and can finish eve
   expect(world1Deaths, 'World 1 should be gentle: ' + JSON.stringify(rows.slice(0, 4))).toBeLessThanOrEqual(3);
   for (const r of rows) expect(r.clears, `${r.name} should be clearable by the bot on 3 lives`).toBeGreaterThanOrEqual(2);
 });
+
+test('a time-freeze holds boss telegraphs so no beam ever lands unannounced', async ({ page }) => {
+  await boot(page);
+  const res = await page.evaluate(() => {
+    const g = (window as any).__game;
+    g.forcedSeed = 21;
+    g.startTour(17); g.introTimer = 0;                    // VOLTA
+    g.player.invuln = 999;
+    // Run until a warning column is on screen.
+    let f = 0;
+    while (!g.hazards.some((h: any) => h.type === 'boss_warning') && f++ < 60 * 30) { g.player.invuln = 999; g.update(1 / 60); }
+    const warn = g.hazards.find((h: any) => h.type === 'boss_warning');
+    if (!warn) return { found: false };
+    const lifeBefore = warn.life;
+    g.freezeTime = 3;
+    for (let i = 0; i < 120; i++) { g.player.invuln = 999; g.update(1 / 60); }
+    const during = { stillThere: g.hazards.includes(warn) && !warn.dead, lifeHeld: Math.abs(warn.life - lifeBefore) < 1e-6, beams: g.hazards.filter((h: any) => h.type === 'boss_beam').length };
+    // After the thaw every beam that appears must overlap a warning that existed just before it.
+    let unannounced = 0;
+    const seen = new Set<any>();
+    for (let i = 0; i < 60 * 6; i++) {
+      const warnings = g.hazards.filter((h: any) => h.type === 'boss_warning').map((h: any) => [h.x, h.w]);
+      g.player.invuln = 999;
+      g.update(1 / 60);
+      for (const h of g.hazards) {
+        if (h.type !== 'boss_beam' || seen.has(h)) continue;
+        seen.add(h);
+        const ok = warnings.some((w: number[]) => Math.abs((w[0] + w[1] / 2) - (h.x + h.w / 2)) < 2);
+        if (!ok) unannounced++;
+      }
+    }
+    return { found: true, during, beamsAfter: seen.size, unannounced };
+  });
+  expect(res.found).toBe(true);
+  expect(res.during).toEqual({ stillThere: true, lifeHeld: true, beams: 0 });
+  expect(res.beamsAfter).toBeGreaterThan(0);
+  expect(res.unannounced).toBe(0);
+});
+
+test('dash i-frames also protect from a bomb ball\'s lethal core', async ({ page }) => {
+  await boot(page);
+  const res = await page.evaluate(() => {
+    const g = (window as any).__game, kp = (window as any).__keysPressed;
+    const setup = () => {
+      g.startTour(0); g.introTimer = 0;
+      const B = g.balls[0].constructor;
+      const bomb = new B(480, 440, 3, 'explosive', 0.001, 0);
+      g.balls = [bomb, new B(900, 100, 0, 'normal', 0.001, 0)];
+      g.player.x = 480; g.player.invuln = 0;
+      return bomb;
+    };
+    let bomb = setup();
+    bomb.fuse = 0.02;
+    g.update(1 / 60); g.update(1 / 60);
+    const standing = g.player.dead;
+    bomb = setup();
+    bomb.fuse = 0.05;
+    kp.ShiftLeft = true;
+    g.update(1 / 60);
+    for (let i = 0; i < 4; i++) g.update(1 / 60);
+    return { standing, dashing: g.player.dead, reason: g.lastDeathReason };
+  });
+  expect(res.standing).toBe(true);
+  expect(res.dashing).toBe(false);
+});
