@@ -30,7 +30,7 @@ import { buildHub, syncHub } from './screens/hub.html';
 import { buildDailyIntro, syncDailyIntro, buildDailyResult, syncDailyResult } from './screens/daily.html';
 import { buildPause, syncPause } from './screens/pause.html';
 import { buildGameOver, syncGameOver } from './screens/gameOver.html';
-import { buildLevelClear, syncLevelClear, buildBossDefeated, buildVictory, syncVictory } from './screens/levelClear.html';
+import { buildLevelClear, syncLevelClear, buildBossDefeated, syncBossDefeated, buildVictory, syncVictory } from './screens/levelClear.html';
 import { buildHUD, syncHUD } from './hud/hud.html';
 import { buildTouchControls } from './hud/touchControls.html';
 import { buildOnboardingOverlay, tickOnboardingOverlay } from './overlay/onboarding.html';
@@ -80,7 +80,7 @@ class UIRoot {
     this.register(State.PAUSED,       buildPause(game),       syncPause);
     this.register(State.GAME_OVER,    buildGameOver(game),    syncGameOver);
     this.register(State.LEVEL_CLEAR,  buildLevelClear(game),  syncLevelClear);
-    this.register(State.BOSS_DEFEATED,buildBossDefeated(game));
+    this.register(State.BOSS_DEFEATED,buildBossDefeated(game), syncBossDefeated);
     this.register(State.VICTORY,      buildVictory(game),     syncVictory);
 
     // HUD + touch controls — always mounted, manage their own visibility.

@@ -433,3 +433,38 @@ test('Score Attack walks the Tour in order on one score and one set of lives', a
   expect(res.state).toBe('playing');
   expect(res.lives).toBe(3);
 });
+
+test('difficulty guard: the mortal bot clears World 1 cleanly and can finish every stage', async ({ page }) => {
+  // Not a claim about human difficulty — a tripwire. If a physics or tuning
+  // change suddenly makes the opening world lethal to a competent scripted
+  // agent, or makes any stage unclearable on three lives, this fails.
+  await boot(page);
+  const rows = await page.evaluate(() => {
+    const g = (window as any).__game, keys = (window as any).__keys, kp = (window as any).__keysPressed;
+    const out: any[] = [];
+    for (let li = 0; li < 27; li++) {
+      let clears = 0, deaths = 0;
+      const seeds = 4;
+      for (let s = 0; s < seeds; s++) {
+        g.forcedSeed = 1000 + s * 7919 + li * 131;
+        (window as any).__botSeed(g.forcedSeed);
+        g.startTour(li); g.introTimer = 0;
+        let lives = g.lives;
+        for (let f = 0; f < 60 * 260; f++) {
+          if (g.state === 'playing') (window as any).__botStep(g, keys, kp);
+          g.update(1 / 60);
+          if (g.lives < lives) { deaths += lives - g.lives; lives = g.lives; }
+          if (g.state === 'level_clear' || g.state === 'game_over') break;
+        }
+        if (g.state === 'level_clear') clears++;
+      }
+      out.push({ li, name: g.levelName, clears, deaths, seeds });
+    }
+    keys.ArrowLeft = keys.ArrowRight = keys.Space = false;
+    g.forcedSeed = null;
+    return out;
+  });
+  const world1Deaths = rows.slice(0, 4).reduce((a: number, r: any) => a + r.deaths, 0);
+  expect(world1Deaths, 'World 1 should be gentle: ' + JSON.stringify(rows.slice(0, 4))).toBeLessThanOrEqual(3);
+  for (const r of rows) expect(r.clears, `${r.name} should be clearable by the bot on 3 lives`).toBeGreaterThanOrEqual(2);
+});

@@ -31,9 +31,9 @@ const ACCEL = 4200;        // px/s² from rest toward the held direction
 const TURN = 7200;         // px/s² when reversing (snappier than a cold start)
 const DECEL = 5600;        // px/s² when the stick is released
 // Ice: the same bot on a frozen floor. Slow to start, slower to stop.
-const ICE_ACCEL = 1150;
+const ICE_ACCEL = 1300;
 const ICE_TURN = 1500;
-const ICE_DECEL = 430;
+const ICE_DECEL = 620;
 
 function approach(v: number, target: number, step: number): number {
   if (v < target) return Math.min(target, v + step);
